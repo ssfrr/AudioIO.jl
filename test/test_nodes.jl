@@ -5,14 +5,17 @@ test_info = AudioIO.DeviceInfo(44100, 512)
 dev_input = zeros(AudioIO.AudioSample, test_info.buf_size)
 
 # A TestNode just renders out 1:buf_size each frame
-type TestNode <: AudioIO.AudioNode
+function TestNode()
+    function render_task(device_input::AudioIO.AudioBuf,
+                         info::AudioIO.DeviceInfo)
+        output = AudioIO.AudioSample[1:info.buf_size]
+        while true
+            _, _ = produce(output)
+        end
+    end
+    return Task(render_task)
 end
 
-function AudioIO.render(node::TestNode,
-                device_input::AudioIO.AudioBuf,
-                info::AudioIO.DeviceInfo)
-    return AudioIO.AudioSample[1:info.buf_size]
-end
 
 #### AudioMixer Tests ####
 

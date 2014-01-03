@@ -13,12 +13,20 @@ type SinOsc <: AudioNode
     end
 end
 
-function render(node::SinOsc, device_input::AudioBuf, info::DeviceInfo)
-    phase = AudioSample[1:info.buf_size] * 2pi * node.freq / info.sample_rate
-    phase += node.phase
-    node.phase = phase[end]
-    return sin(phase)
+function sinosc_render(device_input::AudioBuf, info::DeviceInfo)
+    phase = 0.0
+    while true
+        phase = AudioSample[1:info.buf_size] * 2pi * node.freq / info.sample_rate
+        phase += node.phase
+        node.phase = phase[end]
+        return sin(phase)
+    end
 end
+
+function SinOsc(freq::Real)
+    return Task(sinosc_render)
+end
+
 
 #### AudioMixer ####
 
