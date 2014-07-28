@@ -155,7 +155,7 @@ type SawtoothOscRenderer{T<:Union(Float32, AudioNode)} <: AudioRenderer
     phase::Float32
     buf::AudioBuf
 
-    function SquareOscRenderer(freq)
+    function SawtoothOscRenderer(freq)
         new(freq, 0.0, AudioSample[])
     end
 end
