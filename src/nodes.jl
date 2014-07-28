@@ -73,6 +73,80 @@ function render(node::SinOscRenderer{AudioNode}, device_input::AudioBuf,
     return outbuf
 end
 
+
+
+# Generates a square wave at the given frequency
+
+type SquareOscRenderer{T<:Union(Float32, AudioNode)} <: AudioRenderer
+    freq::T
+    phase::Float32
+    buf::AudioBuf
+
+    function SquareOscRenderer(freq)
+        new(freq, 0.0, AudioSample[])
+    end
+end
+
+typealias SquareOsc AudioNode{SquareOscRenderer}
+SquareOsc(freq::Real) = SquareOsc(SquareOscRenderer{Float32}(freq))
+SquareOsc(freq::AudioNode) = SquareOsc(SquareOscRenderer{AudioNode}(freq))
+SquareOsc() = SquareOsc(440)
+export SquareOsc
+
+function render(node::SquareOscRenderer{Float32}, device_input::AudioBuf,
+        info::DeviceInfo)
+    if length(node.buf) != info.buf_size
+        resize!(node.buf, info.buf_size)
+    end
+    outbuf = node.buf
+    phase = node.phase
+    freq = node.freq
+    # make sure these are Float32s so that we don't allocate doing conversions
+    # in the tight loop
+    pi2::Float32 = 2pi
+    phase_inc::Float32 = 2pi * freq / info.sample_rate
+    i::Int = 1
+    while i <= info.buf_size
+        if phase >= pi
+            outbuf[i] = 1
+        else
+            outbuf[i] = -1
+        end
+        phase = (phase + phase_inc) % pi2
+        i += 1
+    end
+    node.phase = phase
+    return outbuf
+end
+
+function render(node::SquareOscRenderer{AudioNode}, device_input::AudioBuf,
+        info::DeviceInfo)
+    freq = render(node.freq, device_input, info)::AudioBuf
+    block_size = min(length(freq), info.buf_size)
+    if(length(node.buf) != block_size)
+        resize!(node.buf, block_size)
+    end
+    outbuf = node.buf
+
+    phase::Float32 = node.phase
+    pi2::Float32 = 2pi
+    phase_step::Float32 = 2pi/(info.sample_rate)
+    i::Int = 1
+    while i <= block_size
+        if phase >= pi
+            outbuf[i] = 1
+        else
+            outbuf[i] = -1
+        end
+        phase = (phase + phase_step*freq[i]) % pi2
+        i += 1
+    end
+    node.phase = phase
+    return outbuf
+end
+
+
+
 #### AudioMixer ####
 
 # Mixes a set of inputs equally
