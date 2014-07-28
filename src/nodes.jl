@@ -161,9 +161,9 @@ type SawtoothOscRenderer{T<:Union(Float32, AudioNode)} <: AudioRenderer
 end
 
 typealias SawtoothOsc AudioNode{SawtoothOscRenderer}
-SawtoothOsc(freq::Real) = SquareOsc(SawtoothOscRenderer{Float32}(freq))
-SawtoothOsc(freq::AudioNode) = SquareOsc(SawtoothOscRenderer{AudioNode}(freq))
-SawtoothOsc() = SquareOsc(440)
+SawtoothOsc(freq::Real) = SawtoothOsc(SawtoothOscRenderer{Float32}(freq))
+SawtoothOsc(freq::AudioNode) = SawtoothOsc(SawtoothOscRenderer{AudioNode}(freq))
+SawtoothOsc() = SawtoothOsc(440)
 export SawtoothOsc
 
 function render(node::SawtoothOscRenderer{Float32}, device_input::AudioBuf,
