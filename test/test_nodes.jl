@@ -127,6 +127,107 @@ facts("SinOSC") do
     end
 end
 
+# Test of square wave oscillator
+facts("SquareOSC") do
+    freq = 440
+    # note that this range includes the end, which is why there are
+    # sample_rate+1 samples
+    t = linspace(0, 1, int(test_info.sample_rate+1))
+    test_vect = convert(AudioBuf, sin(2pi * t * freq))
+    context("Fixed Frequency") do
+        osc = SquareOsc(freq)
+        render_output = render(osc, dev_input, test_info)
+        @fact mse(render_output, test_vect[1:test_info.buf_size]) =>
+                lessthan(MSE_THRESH)
+        render_output = render(osc, dev_input, test_info)
+        @fact mse(render_output,
+                test_vect[test_info.buf_size+1:2*test_info.buf_size]) =>
+                lessthan(MSE_THRESH)
+        @fact (@allocated render(osc, dev_input, test_info)) => 64
+        stop(osc)
+        render_output = render(osc, dev_input, test_info)
+        @fact render_output => AudioSample[]
+    end
+
+    context("Testing SquareOsc with signal input") do
+        t = linspace(0, 1, int(test_info.sample_rate+1))
+        f = 440 .- t .* (440-110)
+        dt = 1 / test_info.sample_rate
+        # NOTE - this treats the phase as constant at each sample, which isn't strictly
+        # true. Unfortunately doing this correctly requires knowing more about the
+        # modulating signal and doing the real integral
+        phase = cumsum(2pi * dt .* f)
+        unshift!(phase, 0)
+        expected = convert(AudioBuf, sin(phase))
+        if phase >= pi
+            expected = convert(AudioBuf, 1)
+        else
+            expected = convert(AudioBuf, -1)
+        end
+
+        freq = LinRamp(440, 110, 1)
+        osc = SquareOsc(freq)
+        render_output = render(osc, dev_input, test_info)
+        @fact mse(render_output, expected[1:test_info.buf_size]) =>
+                lessthan(MSE_THRESH)
+        render_output = render(osc, dev_input, test_info)
+        @fact mse(render_output,
+                expected[test_info.buf_size+1:2*test_info.buf_size]) =>
+                lessthan(MSE_THRESH)
+        # give a bigger budget here because we're rendering 2 nodes
+        @fact (@allocated render(osc, dev_input, test_info)) => 160
+    end
+end
+
+
+# Test of sawtooth wave oscillator
+facts("SawOsc") do
+    freq = 440
+    # note that this range includes the end, which is why there are
+    # sample_rate+1 samples
+    t = linspace(0, 1, int(test_info.sample_rate+1))
+    test_vect = convert(AudioBuf, sin(2pi * t * freq))
+    context("Fixed Frequency") do
+        osc = SawOsc(freq)
+        render_output = render(osc, dev_input, test_info)
+        @fact mse(render_output, test_vect[1:test_info.buf_size]) =>
+                lessthan(MSE_THRESH)
+        render_output = render(osc, dev_input, test_info)
+        @fact mse(render_output,
+                test_vect[test_info.buf_size+1:2*test_info.buf_size]) =>
+                lessthan(MSE_THRESH)
+        @fact (@allocated render(osc, dev_input, test_info)) => 64
+        stop(osc)
+        render_output = render(osc, dev_input, test_info)
+        @fact render_output => AudioSample[]
+    end
+
+    context("Testing SawOsc with signal input") do
+        t = linspace(0, 1, int(test_info.sample_rate+1))
+        f = 440 .- t .* (440-110)
+        dt = 1 / test_info.sample_rate
+        # NOTE - this treats the phase as constant at each sample, which isn't strictly
+        # true. Unfortunately doing this correctly requires knowing more about the
+        # modulating signal and doing the real integral
+        phase = cumsum(2pi * dt .* f)
+        unshift!(phase, 0)
+        expected = convert(AudioBuf, 1 - 2 * phase / pi2)
+
+        freq = LinRamp(440, 110, 1)
+        osc = SawOsc(freq)
+        render_output = render(osc, dev_input, test_info)
+        @fact mse(render_output, expected[1:test_info.buf_size]) =>
+                lessthan(MSE_THRESH)
+        render_output = render(osc, dev_input, test_info)
+        @fact mse(render_output,
+                expected[test_info.buf_size+1:2*test_info.buf_size]) =>
+                lessthan(MSE_THRESH)
+        # give a bigger budget here because we're rendering 2 nodes
+        @fact (@allocated render(osc, dev_input, test_info)) => 160
+    end
+end
+
+
 facts("ArrayPlayer") do
     context("playing long sample") do
         v = rand(AudioSample, 44100)
