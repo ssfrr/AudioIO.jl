@@ -37,11 +37,12 @@ portaudio_inited = false
 type PortAudioStream <: AudioStream
     root::AudioMixer
     info::DeviceInfo
+    wait_time::Float32
 
     function PortAudioStream(sample_rate::Int=44100, buf_size::Int=1024)
         init_portaudio()
         root = AudioMixer()
-        stream = new(root, DeviceInfo(sample_rate, buf_size))
+        stream = new(root, DeviceInfo(sample_rate, buf_size), 0.0)
         # we need to start up the stream with the portaudio library
         open_portaudio_stream(stream)
         return stream
@@ -104,7 +105,7 @@ function portaudio_task(jl_filedesc::Integer, stream::PortAudioStream)
             # wait for new data to be available from the sound card (and for it
             # to have processed our last frame of data). At some point we
             # should do something with the data we get from the callback
-            wait(jl_rawfd, readable=true)
+            stream.wait_time = @elapsed wait(jl_rawfd, readable=true)
             # read from the file descriptor so that it's empty. We're using
             # ccall here because readbytes() was blocking the whole julia
             # thread. This shouldn't block at all because we just waited on it

@@ -185,6 +185,10 @@ function render(node::FileRenderer, device_input::AudioBuf, info::DeviceInfo)
     audio = Array(AudioSample, 0, node.file.sfinfo.channels)
     while true
         read_audio = read(node.file, info.buf_size-size(audio, 1), AudioSample)
+        if size(read_audio, 1) < (info.buf_size - size(audio, 1))
+            println("asked for $(info.buf_size - size(audio, 1)) frames and got $(size(read_audio, 1))")
+        end
+
         audio = vcat(audio, read_audio)
         if size(audio, 1) >= info.buf_size || size(read_audio, 1) <= 0
             break

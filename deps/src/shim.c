@@ -2,6 +2,8 @@
 #include <semaphore.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <time.h>
+#include <assert.h>
 
 int paCallback(const void *inputBuffer, void *outputBuffer,
                unsigned long framesPerBuffer,
@@ -9,11 +11,14 @@ int paCallback(const void *inputBuffer, void *outputBuffer,
                PaStreamCallbackFlags statusFlags,
                void *userData);
 
+// static uint64_t timeNs(void);
+
 static PaStream *AudioStream;
 static int JuliaPipeReadFD = 0;
 static int JuliaPipeWriteFD = 0;
 static sem_t CSemaphore;
 static void *Buffer = NULL;
+// static uint64_t LastTick = 0;
 
 int make_pipe(void)
 {
@@ -27,8 +32,13 @@ int make_pipe(void)
 
 void synchronize_buffer(void *buffer)
 {
+    int semVal;
     Buffer = buffer;
     sem_post(&CSemaphore);
+    sem_getvalue(&CSemaphore, &semVal);
+    if(semVal != 1) {
+        printf("Bad Semaphore! Should be 1 but is %d\n", semVal);
+    }
 }
 
 PaError open_stream(unsigned int sampleRate, unsigned int bufSize)
@@ -75,6 +85,7 @@ int paCallback(const void *inputBuffer, void *outputBuffer,
     unsigned int i;
     unsigned char fd_data = 0;
 
+    // tock
     sem_wait(&CSemaphore);
     for(i=0; i<framesPerBuffer; i++)
     {
@@ -82,5 +93,13 @@ int paCallback(const void *inputBuffer, void *outputBuffer,
         ((float *)Buffer)[i] = ((float *)inputBuffer)[i];
     }
     write(JuliaPipeWriteFD, &fd_data, 1);
+    // tick
     return 0;
 }
+
+//static uint64_t timeNs(void)
+//{
+//    struct timespec ts;
+//    clock_gettime(CLOCK_MONOTONIC, &ts);
+//    return ts.tv_nsec + ts.tv_sec * 1e9ULL;
+//}
