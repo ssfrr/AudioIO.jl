@@ -55,6 +55,10 @@ function synchronize_buffer(buffer)
     ccall((:synchronize_buffer, libportaudio_shim), Void, (Ptr{Void},), buffer)
 end
 
+function get_callback_period()
+    ccall((:GetCallbackPeriod, libportaudio_shim), Float32, ())
+end
+
 function open_portaudio_stream(stream::PortAudioStream)
     # starts up a stream with the portaudio library and associates it with the
     # given AudioIO PortAudioStream
