@@ -121,7 +121,7 @@ function Base.read(file::AudioFile, nframes::Integer, dtype::Type)
                         file.filePtr, arr, nframes)
     end
 
-    return arr[:, 1:nread]'
+    return Signal{dtype, int(file.sfinfo.samplerate)}(arr[:, 1:nread]')
 end
 
 Base.read(file::AudioFile, dtype::Type) = Base.read(file, file.sfinfo.frames, dtype)
