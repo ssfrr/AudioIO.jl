@@ -121,7 +121,8 @@ function Base.read(file::AudioFile, nframes::Integer, dtype::Type)
                         file.filePtr, arr, nframes)
     end
 
-    return Signal{dtype, int(file.sfinfo.samplerate)}(arr[:, 1:nread]')
+    t = linrange(0, (nread-1)/file.sfinfo.samplerate, nread)
+    return Signal(t, arr[:, 1:nread]')
 end
 
 Base.read(file::AudioFile, dtype::Type) = Base.read(file, file.sfinfo.frames, dtype)

@@ -1,7 +1,7 @@
 module AudioIO
 
 # export the basic API
-export Signal, play, stop, get_audio_devices
+export play, stop, get_audio_devices
 
 # default stream used when none is given
 _stream = nothing
@@ -10,23 +10,6 @@ _stream = nothing
 
 typealias AudioSample Float32
 typealias AudioBuf Array{AudioSample}
-
-# A frame of audio, possibly multi-channel. Assumed to be sampled at
-# a constant rate SR, in hz. Each column is a channel
-type Signal{T, SR} <: AbstractArray
-    data::Array{T, 2}
-end
-
-Base.getindex(sig::Signal, idx::Real) = getindex(sig.data, idx)
-Base.getindex(sig::Signal, idx::Range) = getindex(sig.data, idx)
-Base.getindex(sig::Signal, idx::Range, idx2::Real) = getindex(sig.data, idx)
-Base.setindex!(sig::Signal, args...) = setindex!(sig.data, args...)
-Base.slice(sig::Signal, idx::Union(Int64,Range{Int64})...) = slice(sig.data, idx)
-Base.slice(sig::Signal, idx::Union(Int64, Range{Int64},Colon)...) = slice(sig.data, idx)
-Base.slice(sig::Signal, args...) = slice(sig.data, args...)
-Base.length(sig::Signal) = length(sig.data)
-Base.size(sig::Signal, args...) = size(sig.data, args...)
-Base.ndims(sig::Signal) = ndims(sig.data)
 
 # used as a type parameter for AudioNodes. Subtypes handle the actual DSP for
 # each node
