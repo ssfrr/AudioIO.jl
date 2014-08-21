@@ -249,6 +249,9 @@ function play{T <: Unsigned}(arr::Array{T}, args...)
     play(arr, args...)
 end
 
+# TODO: maybe we should have a handler to play AbstractArray
+play(sig::Signal, args...) = play(sig.data, args...)
+
 #### Noise ####
 
 type WhiteNoiseRenderer <: AudioRenderer end
