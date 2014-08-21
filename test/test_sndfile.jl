@@ -26,6 +26,7 @@ facts("WAV file write/read") do
         actual = read(f)
         @fact length(reference) => length(actual)
         @fact reference => actual[:, 1]
+        @fact typeof(actual) => Signal{Int16, 44100}
     end
 
     # test seeking
