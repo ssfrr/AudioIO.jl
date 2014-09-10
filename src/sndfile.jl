@@ -168,48 +168,36 @@ end
 Base.seek(file::AudioFile, offset::Integer) = seek(file, offset, SF_SEEK_SET)
 rewind(file::AudioFile) = seek(file, 0, SF_SEEK_SET)
 
-type FileRenderer <: AudioRenderer
+immutable FilePlayer <: AudioNode
     file::AudioFile
-
-    function FileRenderer(file::AudioFile)
-        node = new(file)
-        finalizer(node, n -> close(n.file))
-        return node
-    end
 end
 
-typealias FilePlayer AudioNode{FileRenderer}
-FilePlayer(file::AudioFile) = FilePlayer(FileRenderer(file))
-FilePlayer(path::String) = FilePlayer(AudioIO.open(path))
+FilePlayer(fname::String) = FilePlayer(AudioIO.open(fname))
+    
 
-function render(node::FileRenderer, device_input::AudioBuf, info::DeviceInfo)
-    @assert node.file.sfinfo.samplerate == info.sample_rate
+function pull(node::FilePlayer, sf, offset, n, buf=Float32[])
+    # Ignore the offset and keep reading the file
+    # TODO: resample if necessary
 
     # Keep reading data from the file until the output buffer is full, but stop
     # as soon as no more data can be read from the file
     audio = Array(AudioSample, 0, node.file.sfinfo.channels)
     while true
-        read_audio = read(node.file, info.buf_size-size(audio, 1), AudioSample)
+        read_audio = read(node.file, n-size(audio, 1), AudioSample)
         audio = vcat(audio, read_audio)
-        if size(audio, 1) >= info.buf_size || size(read_audio, 1) <= 0
+        if size(audio, 1) >= n || size(read_audio, 1) <= 0
             break
         end
     end
 
     # if the file is stereo, mix the two channels together
     if node.file.sfinfo.channels == 2
-        return (audio[:, 1] / 2) + (audio[:, 2] / 2)
-    else
-        return audio
+        audio = (audio[:, 1] / 2) + (audio[:, 2] / 2)
     end
+
+    if length(audio) < n
+        resize!(audio, n)
+    end
+    audio
 end
 
-function play(filename::String, args...)
-    player = FilePlayer(filename)
-    play(player, args...)
-end
-
-function play(file::AudioFile, args...)
-    player = FilePlayer(file)
-    play(player, args...)
-end
