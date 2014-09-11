@@ -37,6 +37,8 @@ end
 immutable NullNode <: AudioNode end
 
 sampleat(::NullNode, sf, i) = zero(Float32)
+pull(::NullNode, sf, offset, n, buf=Float32[]) =
+    zeros(Float32, n)
 
 *(in1::NullNode, in2::NullNode) = in1
 *(in1::AudioNode, in2::NullNode) = in2
@@ -51,6 +53,7 @@ sampleat(::NullNode, sf, i) = zero(Float32)
 immutable WhiteNoise <: AudioNode end
 
 sampleat(::WhiteNoise, sf, i) = rand(Float32) * 2 - 1
+pull(::WhiteNoise, sf, offset, n, buf=Float32[]) = rand(Float32, n)
 
 
 # Sine wave
@@ -176,10 +179,7 @@ function pull(node::Gain{Float32}, sf, offset, n, buf=Float32[])
     end
     i = 1
     pull(node.input, sf, offset, n, buf)
-    @inbounds while i <= n
-        buf[i] *= node.gain
-        i += 1
-    end
+    scale!(buf, node.gain)
     return buf
 end
 
@@ -192,17 +192,10 @@ function pull{T<:AudioNode}(node::Gain{T}, sf, offset, n, buf=Float32[])
     end
     i = 1
     pull(node.input, sf, offset, n, buf)
-    gain = pull(node.input, sf, offset, n)
+    gain = pull(node.gain, sf, offset, n)
 
-    if length(gain) != n
-        BoundsError()
-    end
-
-    @inbounds while i <= n
-        buf[i] *= gain[i]
-        i += 1
-    end
-    return buf
+    broadcast!(*, buf, gain, buf)
+    buf
 end
 
 (*)(x::Real, input::AudioNode) = Gain(float32(x), input)
