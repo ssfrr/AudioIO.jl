@@ -67,15 +67,16 @@ function pull(osc::SinOsc, sf, offset, n, buf=Float32[])
     if length(buf) != n
         resize!(buf, n)
     end
+
     i = 1
+    j = offset
     coeff = float32(osc.freq * 2pi / sf)
-    phase = coeff * (offset % sf)
     @inbounds while i <= n
-        buf[i] = sin(phase)
-        phase += coeff
+        buf[i] = sin(j*coeff)
         i += 1
+        j += 1
     end
-    return buf
+    buf
 end
 
 
