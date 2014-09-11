@@ -22,7 +22,7 @@ function pull(node::AudioNode, sf, offset, n, buf=Float32[])
     end
     i = offset
     j = 1
-    while n >= j
+    @inbounds while n >= j
         # draw ith sample at sf sample frequency from node
         buf[j] = sampleat(node, sf, i)
         i += 1
@@ -58,7 +58,22 @@ immutable SinOsc <: AudioNode
     freq::Float32
 end
 
-sampleat(osc::SinOsc, sf, i) = sin(osc.freq * 2pi * i / sf)
+sampleat(osc::SinOsc, sf, i) = sin(i * osc.freq * 2pi / sf)
+
+function pull(osc::SinOsc, sf, offset, n, buf=Float32[])
+    if length(buf) != n
+        resize!(buf, n)
+    end
+    i = 1
+    coeff = float32(osc.freq * 2pi / sf)
+    phase = coeff * (offset % sf)
+    @inbounds while i <= n
+        buf[i] = sin(phase)
+        phase += coeff
+        i += 1
+    end
+    return buf
+end
 
 
 # Square wave
@@ -119,6 +134,11 @@ end
 sampleat(m::Mixer, sf, i) = map(n->sampleat(n, sf, i), m.children)
 
 # Specialized pull for Mixer
+pull(node::Mixer{0}, sf, offset, n, buf=Float32[]) =
+    pull(NullNode(), sf, offset, n, buf)
+pull(node::Mixer{1}, sf, offset, n, buf=Float32[]) =
+    pull(node.children[1], sf, offset, n, buf)
+
 function pull{m}(node::Mixer{m}, sf, offset, n, buf=Float32[])
     if length(buf) != n
         resize!(buf, n)
@@ -126,8 +146,10 @@ function pull{m}(node::Mixer{m}, sf, offset, n, buf=Float32[])
     fill!(buf, 0)
     pull(node.children[1], sf, offset, n, buf)
     k = 2
-    while m >= k
-        tmp = pull(node.children[k], sf, offset, n)
+    tmp = Float32[]
+    @inbounds while m >= k
+        pull(node.children[k], sf, offset, n, tmp)
+        if length(tmp) != n BoundsError() end
         i = 1
         while n >= i
             buf[i] += tmp[i]
@@ -148,8 +170,40 @@ end
 sampleat(node::Gain{Float32}, sf, i) =
     node.gain * sampleat(node.input, sf, i)
 
+function pull(node::Gain{Float32}, sf, offset, n, buf=Float32[])
+    if length(buf) != n
+        resize!(buf, n)
+    end
+    i = 1
+    pull(node.input, sf, offset, n, buf)
+    @inbounds while i <= n
+        buf[i] *= node.gain
+        i += 1
+    end
+    return buf
+end
+
 sampleat{T <: AudioNode}(node::Gain{T}, sf, i) =
     sampleat(node.gain, sf, i) * sampleat(node.input, sf, i)
+
+function pull{T<:AudioNode}(node::Gain{T}, sf, offset, n, buf=Float32[])
+    if length(buf) != n
+        resize!(buf, n)
+    end
+    i = 1
+    pull(node.input, sf, offset, n, buf)
+    gain = pull(node.input, sf, offset, n)
+
+    if length(gain) != n
+        BoundsError()
+    end
+
+    @inbounds while i <= n
+        buf[i] *= gain[i]
+        i += 1
+    end
+    return buf
+end
 
 (*)(x::Real, input::AudioNode) = Gain(float32(x), input)
 (*)(input::AudioNode, x::Real) = Gain(float32(x), input)
@@ -172,6 +226,19 @@ immutable AmpOffset{T <:AudioNode} <: AudioNode
     input::T
 end
 const Offset = AmpOffset
+
+function pull(node::AmpOffset, sf, offset, n, buf=Float32[])
+    if length(buf) != n
+        resize!(buf, n)
+    end
+    i = 1
+    pull(node.input, sf, offset, n, buf)
+    @inbounds while i <= n
+        buf[i] += node.amplitude
+        i += 1
+    end
+    return buf
+end
 
 +(x::Real, a::AudioNode) = AmpOffset(float32(x), a)
 +(a::AudioNode, x::Real) = AmpOffset(float32(x), a)
