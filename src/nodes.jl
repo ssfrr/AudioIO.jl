@@ -52,8 +52,7 @@ pull(::NullNode, sf, offset, n, buf=Float32[]) =
 # White noise
 immutable WhiteNoise <: AudioNode end
 
-sampleat(::WhiteNoise, sf, i) = rand(Float32) * 2 - 1
-pull(::WhiteNoise, sf, offset, n, buf=Float32[]) = rand(Float32, n)
+sampleat(::WhiteNoise, sf, i) = rand(Float32) * 2.0f0 - 1.0f0
 
 
 # Sine wave
@@ -69,12 +68,12 @@ function pull(osc::SinOsc, sf, offset, n, buf=Float32[])
     end
 
     i = 1
-    j = offset
+    j = float32(offset)
     coeff = float32(osc.freq * 2pi / sf)
     @inbounds while i <= n
         buf[i] = sin(j*coeff)
         i += 1
-        j += 1
+        j += 1.0f0
     end
     buf
 end
@@ -88,16 +87,36 @@ end
 sampleat(osc::SquareOsc, sf, i) =
     (floor(2 * i * osc.freq / sf) % 2 == 0) ? 1 : -1
 
+function pull(sq::SquareOsc, sf, offset, n, buf=Float32[])
+    i = 1
+    j = offset
+    steplen = sf / sq.freq / 2
+    v = j % 2 == 0 ? -1.0f0 : 1.0f0
+    toggle = j % steplen
+    togglei = int(toggle)
+
+    while i <= n
+        if i >= togglei
+            v = -v
+            toggle = toggle + steplen
+            togglei = int(toggle)
+        end
+        @inbounds buf[i] = v
+        i += 1
+    end
+    buf
+end
+
 
 # Saw tooth wave
 immutable TriangleOsc <: AudioNode
     freq::Float32
-    startangle::Float32
+    peakoffset::Float32
 end
 
 function sampleat(osc::TriangleOsc, sf, i)
     # where x reaches 1.
-    slope1 = tan(osc.startangle)
+    slope1 = 1 / osc.peakoffset
     x0 = 2 / slope1
     x = (i / sf * osc.freq) - floor(i / sf * osc.freq)
     if x < x0
