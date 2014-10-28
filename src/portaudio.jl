@@ -45,20 +45,22 @@ portaudio_inited = false
 ################## Types ####################
 
 type PortAudioStream <: AudioStream
-    root::AudioMixer
+    root::AudioNode
     info::DeviceInfo
     show_warnings::Bool
     stream::PaStream
+    offset::Int
 
     function PortAudioStream(sample_rate::Integer=44100,
                              buf_size::Integer=1024,
-                             show_warnings::Bool=false)
+                             show_warnings::Bool=false,
+                             offset::Integer=0)
         require_portaudio_init()
         stream = Pa_OpenDefaultStream(1, 1, paFloat32, sample_rate, buf_size)
         Pa_StartStream(stream)
-        root = AudioMixer()
+        root = NullNode()
         this = new(root, DeviceInfo(sample_rate, buf_size),
-                   show_warnings, stream)
+                   show_warnings, stream, offset)
         info("Scheduling PortAudio Render Task...")
         # the task will actually start running the next time the current task yields
         @schedule(portaudio_task(this))
@@ -86,6 +88,7 @@ end
 function portaudio_task(stream::PortAudioStream)
     info("PortAudio Render Task Running...")
     n = bufsize(stream)
+    sf = samplerate(stream)
     buffer = zeros(AudioSample, n)
     try
         while true
@@ -94,13 +97,9 @@ function portaudio_task(stream::PortAudioStream)
             end
             Pa_ReadStream(stream.stream, buffer, n, stream.show_warnings)
             # assume the root is always active
-            rendered = render(stream.root.renderer, buffer, stream.info)::AudioBuf
-            for i in 1:length(rendered)
-                buffer[i] = rendered[i]
-            end
-            for i in (length(rendered)+1):n
-                buffer[i] = 0.0
-            end
+            #rendered = render(stream.root.renderer, buffer, stream.info)::AudioBuf
+            samples = pull(stream.root, sf, stream.offset, n, buffer)
+            stream.offset += n
             while Pa_GetStreamWriteAvailable(stream.stream) < n
                 sleep(0.005)
             end
