@@ -4,37 +4,38 @@
 # and unmuted state
 using AudioIO
 
-type MutableNode <: AudioIO.AudioNode
+type MutableRenderer <: AudioIO.AudioRenderer
   active::Bool
   deactivate_cond::Condition
   muted::Bool
 
-  function MutableNode(muted::Bool)
+  function MutableRenderer(muted::Bool)
     new(false, Condition(), muted)
   end
 end
+typealias MutableNode AudioIO.AudioNode{MutableRenderer}
 
-function MutableNode()
-  MutableNode(false)
+function MutableRenderer()
+  MutableRenderer(false)
 end
 
 import AudioIO.render
-function render(node::MutableNode, device_input::AudioIO.AudioBuf, info::AudioIO.DeviceInfo)
-  return device_input .* !node.muted, AudioIO.is_active(node)
+function render(node::MutableRenderer, device_input::AudioIO.AudioBuf, info::AudioIO.DeviceInfo)
+  return device_input .* !node.muted
 end
 
 function mute(node::MutableNode)
-  node.muted = true
+  node.renderer.muted = true
 end
 
 function unmute(node::MutableNode)
-  node.muted = false
+  node.renderer.muted = false
 end
 
-mutableNode = MutableNode()
+mutableNode = MutableNode(false)
 AudioIO.play(mutableNode)
 muteTransitions = { true => unmute, false => mute }
 for i in 1:10
   sleep(1)
-  muteTransitions[mutableNode.muted](mutableNode)
+  muteTransitions[mutableNode.renderer.muted](mutableNode)
 end
