@@ -4,8 +4,8 @@ using BinDeps
 
 ENV["JULIA_ROOT"] = abspath(JULIA_HOME, "../../")
 
-libportaudio = library_dependency("libportaudio")
-libsndfile = library_dependency("libsndfile")
+libportaudio = library_dependency("libportaudio", aliases=["libportaudio-2"])
+libsndfile = library_dependency("libsndfile", aliases=["libsndfile-1"])
 
 # TODO: add other providers with correct names
 provides(AptGet, "portaudio19-dev", libportaudio)
