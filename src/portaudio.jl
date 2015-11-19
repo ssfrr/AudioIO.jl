@@ -210,10 +210,25 @@ function write(stream::Pa_AudioStream, buffer)
 end
 
 """
-Callback open of Pa_AudioStream for non-blocking I/O
+Callback helper function
 """
+function make_c_callback(func)
+    const mycallback_c = cfunction(func, (Ptr(Void), Cint), ()))
+end
 
+"""
+Read callback process
+"""
+function pa_read_callback_task
 
+end
+
+"""
+Write callback process
+"""
+function pa_write_callback_task
+
+end
 
 
 ############ Internal Functions ############
