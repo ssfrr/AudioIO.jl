@@ -218,9 +218,9 @@ typedef int PaStreamCallback(const void *input, void *output,
                              PaStreamCallbackFlags statusFlags, 
                              void *userData)
 """
-function make_c_callback(func)
+function make_c_callback(func, output=true)
 
-    const mycallback_c = cfunction(func, (Ptr(Void), Cint), ()))
+    const mycallback_c = cfunction(func, (Ptr(Void), Ptr(Void), Culong, Ptr(Void), Cint, Ptr(Void)), (Cint))
 end
 
 """
