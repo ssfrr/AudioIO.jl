@@ -148,7 +148,7 @@ type Pa_AudioStream <: AudioStream
         Pa_StartStream(stream)
         root = AudioMixer()
         datatype = PaSampleFormat_to_T(sample_format)
-        sbuf = ones(datatype, framesPerBuffer)
+        sbuf = zeros(datatype, framesPerBuffer)
         this = new(root, DeviceInfo(sample_rate, framesPerBuffer), 
                    show_warnings, stream, sample_format, sbuf, false)
         info("Scheduling PortAudio Render Task...")
@@ -164,29 +164,37 @@ end
 """
 Blocking read from a Pa_AudioStream that is open as input
 """
-function read_Pa_AudioStream(stream::Pa_AudioStream)
-    while true
-        while stream.parent_may_use_buffer == false
-            sleep(0.001)
-        end
-        buffer = deepcopy(stream.sbuffer)       
-        stream.parent_may_use_buffer = false
-        return buffer
-     end
+function read(stream::Pa_AudioStream, bufsize=stream.framesPerBuffer)
+    datatype = PaSampleFormat_to_T(stream.sample_format)
+    ret_buffer = zeros(datatype, bufsize)
+    cur = 0
+    read_needed = bufsize
+    while stream.parent_may_use_buffer == false
+        sleep(0.001)
+    end
+    while read_needed > 0
+        read_size = min(read_needed, stream.framesPerBuffer)
+        ret_buffer[cur: cur + read_size] = stream.sbuffer[1:read_size]
+        cur = cur + read_size
+        read_needed -= read_size
+
+    end
+    stream.parent_may_use_buffer = true
+    ret_buffer
 end
 
 """
 Blocking write to a Pa_AudioStream that is open for output
 """
-function write_Pa_AudioStream(stream::Pa_AudioStream, buffer)
+function write(stream::Pa_AudioStream, buffer)
     retval = 1
     sbufsize = length(stream.sbuffer)
     inputlen = length(buffer)
     if(inputlen > sbufsize)
-        info("Overflow at write_Pa_AudioStream")
+        info("Overflow at write to Pa_AudioStream")
         retval = 0
     elseif(inputlen < sbufsize)
-        info("Underflow at write_Pa_AudioStream")
+        info("Underflow at write to Pa_AudioStream")
         retval = -1
     end
     while true
@@ -200,6 +208,13 @@ function write_Pa_AudioStream(stream::Pa_AudioStream, buffer)
     end
     retval
 end
+
+"""
+Callback open of Pa_AudioStream for non-blocking I/O
+"""
+
+
+
 
 ############ Internal Functions ############
 
