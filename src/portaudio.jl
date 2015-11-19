@@ -219,8 +219,14 @@ typedef int PaStreamCallback(const void *input, void *output,
                              void *userData)
 """
 function make_c_callback(func, output=true)
-
-    const mycallback_c = cfunction(func, (Ptr(Void), Ptr(Void), Culong, Ptr(Void), Cint, Ptr(Void)), (Cint))
+   type Timesforcallback
+       Cdouble inAdc
+       Cdouble current
+       Cdouble outAdc
+    end
+    Timesforcallback tfc
+    
+    const mycallback_c = cfunction(func, (Ptr(Void), Ptr(Void), Culong, Ptr(Void), Cint, Ptr(Timesforcallback)), (Cint))
 end
 
 """
