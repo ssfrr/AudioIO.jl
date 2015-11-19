@@ -131,7 +131,6 @@ type Pa_AudioStream <: AudioStream
     stream::PaStream
     sformat::PaSampleFormat
     sbuffer::Array{Real}
-    sbuffer_output_waiting::Integer
     parent_may_use_buffer::Bool
 
     """ 
@@ -151,7 +150,7 @@ type Pa_AudioStream <: AudioStream
         datatype = PaSampleFormat_to_T(sample_format)
         sbuf = ones(datatype, framesPerBuffer)
         this = new(root, DeviceInfo(sample_rate, framesPerBuffer), 
-                   show_warnings, stream, sample_format, sbuf, 0, false)
+                   show_warnings, stream, sample_format, sbuf, false)
         info("Scheduling PortAudio Render Task...")
         if input
             @schedule(pa_input_task(this))
@@ -258,7 +257,7 @@ function PaSampleFormat_to_T(fmt::PaSampleFormat)
 end
 
 """
-    Get input device data, pass as a producer, no rendering
+    Get input device data, pass via stream.sbuffer, no rendering
 """
 function pa_input_task(stream::Pa_AudioStream)
     info("PortAudio Input Task Running...")
@@ -296,15 +295,10 @@ function pa_output_task(stream::Pa_AudioStream)
     n = bufsize(stream)
     try
         while true
-            navail = stream.sbuffer_output_waiting
-            if navail > n
-                info("Possible output buffer overflow in stream")
-                navail = n
-            end
-            if (navail > 1) & (stream.parent_may_use_buffer == false) &
-               (Pa_GetStreamWriteAvailable(stream.stream) < navail)
+            if (stream.parent_may_use_buffer == false) &
+               (Pa_GetStreamWriteAvailable(stream.stream) >= n)
                 Pa_WriteStream(stream.stream, stream.sbuffer, 
-                               navail, stream.show_warnings)
+                               n, stream.show_warnings)
                 stream.parent_may_use_buffer = true
             else
                 sleep(0.005)
