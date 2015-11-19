@@ -211,8 +211,15 @@ end
 
 """
 Callback helper function
+makes the C function of this type:
+typedef int PaStreamCallback(const void *input, void *output, 
+                             unsigned long frameCount, 
+                             const PaStreamCallbackTimeInfo *timeInfo, 
+                             PaStreamCallbackFlags statusFlags, 
+                             void *userData)
 """
 function make_c_callback(func)
+
     const mycallback_c = cfunction(func, (Ptr(Void), Cint), ()))
 end
 
