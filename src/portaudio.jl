@@ -95,14 +95,20 @@ end
     The stream is unidirectional, either inout or default output
     see http://portaudio.com/docs/v19-doxydocs/portaudio_8h.html
 """
-function Pa_OpenStream(device::PaDeviceIndex, 
-                       channels::Cint, input::Bool,
-                       sampleFormat::PaSampleFormat,
-                       sampleRate::Cdouble, framesPerBuffer::Culong)
+function Pa_OpenStream(device::PaDeviceIndex, channels::Cint, 
+                       input::Bool=false, sampleFormat::PaSampleFormat,
+                       sampleRate::Cdouble, framesPerBuffer::Culong,
+                       callback)
     streamPtr::Array{PaStream} = PaStream[0]
     ioParameters = Pa_StreamParameters(device, channels, 
                                        sampleFormat, PaTime(0.001), 
                                        Ptr{Void}(0))
+    streamcallback = Ptr{PaStreamCallback}(0) 
+    if callback != Void
+        if input
+        else
+        end
+    end
     if input
         err = ccall((:Pa_OpenStream, libportaudio), PaError, 
                     (PaStream, Ref{Pa_StreamParameters}, Ptr{Void},
@@ -110,7 +116,7 @@ function Pa_OpenStream(device::PaDeviceIndex,
                     Ptr{PaStreamCallback}, Ptr{Void}),
                     streamPtr, ioParameters, Ptr{Void}(0),
                     sampleRate, framesPerBuffer, 0, 
-                    Ptr{PaStreamCallback}(0), Ptr{Void}(0))
+                    streamcallback, Ptr{Void}(0))
     else
         err = ccall((:Pa_OpenStream, libportaudio), PaError, 
                     (PaStream, Ptr{Void}, Ref{Pa_StreamParameters},
@@ -118,7 +124,7 @@ function Pa_OpenStream(device::PaDeviceIndex,
                     Ptr{PaStreamCallback}, Ptr{Void}),
                     streamPtr, Ptr{Void}(0), ioParameters,
                     sampleRate, framesPerBuffer, 0, 
-                    Ptr{PaStreamCallback}(0), Ptr{Void}(0))
+                    streamcallback, Ptr{Void}(0))
     end             
     handle_status(err)
     streamPtr[1]
@@ -141,21 +147,25 @@ type Pa_AudioStream <: AudioStream
                               sample_rate::Integer=44100,
                               framesPerBuffer::Integer=2048,
                               show_warnings::Bool=false,
-                              sample_format::PaSampleFormat=paInt16)
+                              sample_format::PaSampleFormat=paInt16,
+                              callback=Void)
         require_portaudio_init()
         stream = Pa_OpenStream(device_index, channels, input, sample_format,
-                               Cdouble(sample_rate), Culong(framesPerBuffer))
+                               Cdouble(sample_rate), Culong(framesPerBuffer),
+                               callback)
         Pa_StartStream(stream)
         root = AudioMixer()
         datatype = PaSampleFormat_to_T(sample_format)
         sbuf = zeros(datatype, framesPerBuffer)
         this = new(root, DeviceInfo(sample_rate, framesPerBuffer), 
                    show_warnings, stream, sample_format, sbuf, false)
-        info("Scheduling PortAudio Render Task...")
-        if input
-            @schedule(pa_input_task(this))
-        else
-            @schedule(pa_output_task(this))
+        if callback==Void
+            info("Scheduling PortAudio Render Task...")
+            if input
+                @schedule(pa_input_task(this))
+            else
+                @schedule(pa_output_task(this))
+            end
         end
         this
     end
