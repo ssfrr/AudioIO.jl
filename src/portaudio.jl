@@ -141,7 +141,10 @@ type Pa_AudioStream <: AudioStream
 
     """ 
         Get device parameters needed for opening with portaudio
-        default is input as 44100/16bit int, same as CD audio type input
+        default is output as 44100/16bit int, same as CD audio type input
+        callback is optional, otherwise use blocing read and write functions
+        the callback must be a function that, if for writing, can return as an argument
+        a buffer the size and type same as stream.sbuffer, or if for output should 
     """
     function Pa_AudioStream(device_index, channels=2, input=false,
                               sample_rate::Integer=44100,
@@ -159,7 +162,7 @@ type Pa_AudioStream <: AudioStream
         sbuf = zeros(datatype, framesPerBuffer)
         this = new(root, DeviceInfo(sample_rate, framesPerBuffer), 
                    show_warnings, stream, sample_format, sbuf, false)
-        if callback==Void
+        if callback == Void
             info("Scheduling PortAudio Render Task...")
             if input
                 @schedule(pa_input_task(this))
@@ -221,38 +224,34 @@ end
 
 """
 Callback helper function
-makes the C function of this type:
-typedef int PaStreamCallback(const void *input, void *output, 
-                             unsigned long frameCount, 
-                             const PaStreamCallbackTimeInfo *timeInfo, 
-                             PaStreamCallbackFlags statusFlags, 
-                             void *userData)
+returns a C function of this type:
+    typedef int PaStreamCallback(const void *input, void *output, 
+                                 unsigned long frameCount, 
+                                 const PaStreamCallbackTimeInfo *timeInfo, 
+                                 PaStreamCallbackFlags statusFlags, 
+                                 void *userData)
 """
-function make_c_callback(func, output=true)
-   type Timesforcallback
+function make_c_callback(func, Culong frameCount, input_buffer)
+    type CCallbackTimeInfo
        Cdouble inAdc
        Cdouble current
        Cdouble outAdc
     end
-    Timesforcallback tfc
+    typealias PaStreamCallbackFlags Culong
+    output = Ptr{Void}(0)
+    input = Ptr{Void}(input_buffer)
+    timeInfo = CCallbackTimeInfo(0)
+    statusFlags = PaStreamCallbackFlags(0)
+    userData = Ptr{Void}(0)
     
-    const mycallback_c = cfunction(func, (Ptr(Void), Ptr(Void), Culong, Ptr(Void), Cint, Ptr(Timesforcallback)), (Cint))
+    function ccallback()
+        func(input_buffer)
+    end
 end
-
-"""
-Read callback process
-"""
-function pa_read_callback_task
-
+    
+    
+    const c_callback = cfunction(func, (Ptr(Void), Ptr(Void), Culong, Ptr(Void), Cint, Ptr(Timesforcallback)), (Cint))
 end
-
-"""
-Write callback process
-"""
-function pa_write_callback_task
-
-end
-
 
 ############ Internal Functions ############
 
