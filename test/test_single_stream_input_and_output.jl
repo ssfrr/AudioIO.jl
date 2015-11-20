@@ -59,7 +59,7 @@ function read_seconds!(devnum, buf = BUFFER, secs = RECORD_SECONDS)
                                       SRATE, chunksize)
     read_pos = 1
     while read_pos < length(buf)
-        chunk = AudioIO.read_Pa_AudioStream(instream)
+        chunk = AudioIO.read(instream)
         end_pos = read_pos + chunksize - 1
         buf[read_pos: end_pos] = instream.sbuffer[1:chunksize]
         read_pos = end_pos + 1
@@ -78,11 +78,13 @@ function write_seconds(devnum, outbuf = BUFFER)
     while write_pos < length(outbuf)
         end_pos = write_pos + chunksize - 1
         buffer = outbuf[write_pos: end_pos]
+        AudioIO.write(outstream, buffer)
         write_pos = end_pos + 1
     end
 @test write_pos < length(outbuf) + 10
 end
 
+# begin main test portion
 INS, OUTS = choose_input_output()
 
 read_seconds!(INS, BUFFER)
