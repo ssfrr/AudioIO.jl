@@ -92,19 +92,19 @@ end
 
 """
     Open a single stream, not necessarily the default one
-    The stream is unidirectional, either inout or default output
+    The stream is unidirectional, either input or default output
     see http://portaudio.com/docs/v19-doxydocs/portaudio_8h.html
 """
 function Pa_OpenStream(device::PaDeviceIndex, channels::Cint, 
-                       input::Bool=false, sampleFormat::PaSampleFormat,
+                       input::Bool, sampleFormat::PaSampleFormat,
                        sampleRate::Cdouble, framesPerBuffer::Culong,
                        callback)
-    streamPtr::Array{PaStream} = PaStream[0]
+    streamPtr::Array{PaStream} = PaStream[1]
     ioParameters = Pa_StreamParameters(device, channels, 
                                        sampleFormat, PaTime(0.001), 
                                        Ptr{Void}(0))
     streamcallback = Ptr{PaStreamCallback}(0) 
-    if callback != Void
+    if callback != 0
         if input
         else
         end
@@ -151,7 +151,7 @@ type Pa_AudioStream <: AudioStream
                               framesPerBuffer::Integer=2048,
                               show_warnings::Bool=false,
                               sample_format::PaSampleFormat=paInt16,
-                              callback=Void)
+                              callback=0)
         require_portaudio_init()
         stream = Pa_OpenStream(device_index, channels, input, sample_format,
                                Cdouble(sample_rate), Culong(framesPerBuffer),
@@ -162,7 +162,7 @@ type Pa_AudioStream <: AudioStream
         sbuf = zeros(datatype, framesPerBuffer)
         this = new(root, DeviceInfo(sample_rate, framesPerBuffer), 
                    show_warnings, stream, sample_format, sbuf, false)
-        if callback == Void
+        if callback == 0
             info("Scheduling PortAudio Render Task...")
             if input
                 @schedule(pa_input_task(this))
@@ -177,8 +177,9 @@ end
 """
 Blocking read from a Pa_AudioStream that is open as input
 """
-function read(stream::Pa_AudioStream, bufsize=stream.framesPerBuffer)
-    datatype = PaSampleFormat_to_T(stream.sample_format)
+function read(stream::Pa_AudioStream)
+    datatype = PaSampleFormat_to_T(stream.sformat)
+    bufsize = length(stream.sbuffer)
     ret_buffer = zeros(datatype, bufsize)
     cur = 0
     read_needed = bufsize
@@ -186,11 +187,10 @@ function read(stream::Pa_AudioStream, bufsize=stream.framesPerBuffer)
         sleep(0.001)
     end
     while read_needed > 0
-        read_size = min(read_needed, stream.framesPerBuffer)
-        ret_buffer[cur: cur + read_size] = stream.sbuffer[1:read_size]
+        read_size = min(read_needed, bufsize)
+        ret_buffer[cur+1: cur+read_size] = stream.sbuffer[1:read_size]
         cur = cur + read_size
         read_needed -= read_size
-
     end
     stream.parent_may_use_buffer = true
     ret_buffer
@@ -210,47 +210,62 @@ function write(stream::Pa_AudioStream, buffer)
         info("Underflow at write to Pa_AudioStream")
         retval = -1
     end
-    while true
-        while stream.parent_may_use_buffer == false
-            sleep(0.001)
-        end
-        for idx in 1:min(sbufsize, inputlen)
-            stream.sbuffer[idx] = buffer[idx]
-        end
-        stream.parent_may_use_buffer = false
+    while stream.parent_may_use_buffer == false
+        sleep(0.001)
     end
+    for idx in 1:min(sbufsize, inputlen)
+        stream.sbuffer[idx] = buffer[idx]
+    end
+    stream.parent_may_use_buffer = false
     retval
 end
 
 """
 Callback helper function
-returns a C function of this type:
-    typedef int PaStreamCallback(const void *input, void *output, 
-                                 unsigned long frameCount, 
-                                 const PaStreamCallbackTimeInfo *timeInfo, 
-                                 PaStreamCallbackFlags statusFlags, 
-                                 void *userData)
+takes a function to process the data when the callback occurs, 
+plus the number of frames to be passes each callback, 
+plus an input buffer which is 0 if for output and size framesPerBuffer
+if for input. Function should return a buffer of framesPerBuffer frames
+if for output, should process the input_buffer argument if for output
+
+Returns a C function of this type:
+  typedef int PaStreamCallback(const void *input, void *output, 
+                               unsigned long frameCount, 
+                               const PaStreamCallbackTimeInfo *timeInfo, 
+                               PaStreamCallbackFlags statusFlags, 
+                               void *userData)
 """
-function make_c_callback(func, Culong frameCount, input_buffer)
+function make_c_callback(julia_callback, sample_format::PaSampleFormat)
     type CCallbackTimeInfo
-       Cdouble inAdc
-       Cdouble current
-       Cdouble outAdc
+       inAdc::Cdouble
+       current::Cdouble
+       outAdc::Cdouble
     end
     typealias PaStreamCallbackFlags Culong
-    output = Ptr{Void}(0)
-    input = Ptr{Void}(input_buffer)
-    timeInfo = CCallbackTimeInfo(0)
-    statusFlags = PaStreamCallbackFlags(0)
     userData = Ptr{Void}(0)
     
-    function ccallback()
-        func(input_buffer)
+    function callback(output::Ptr{Void}, input::Ptr{Void}, 
+                       frameCount::Culong, 
+                       timeInfo::Ptr{CCallBackTimeInfo}, 
+                       sflags::PaStreamCallbackFlags,
+                       udata::Ptr{Void})
+        if input != 0
+            # input stream
+            julia_callback(Array{datatype}(input))
+        else
+            # output stream
+            buf = julia_callback(0)
+            datatype = PaSampleFormat_to_T(sample_format)
+            obuf = Array{datatype}(output)
+            output[1:length(buf)] = buf[1:length(buf)]
+        end
+        0
     end
-end
-    
-    
-    const c_callback = cfunction(func, (Ptr(Void), Ptr(Void), Culong, Ptr(Void), Cint, Ptr(Timesforcallback)), (Cint))
+    const c_callback = cfunction(callback, Cint,
+                                 (Ptr{Void}, Ptr{Void}, 
+                                  Culong, Ptr{CCallBackTimeInfo}, 
+                                  Culong, Ptr{Void}))
+    return c_callback
 end
 
 ############ Internal Functions ############
@@ -285,8 +300,8 @@ function portaudio_task(stream::PortAudioStream)
 end
 
 """
-    Helper function to make the right type of buffer for various 
-    sample formats. Converts PaSampleFormat to a typeof
+Helper function to make the right type of buffer for various 
+sample formats. Converts PaSampleFormat to a typeof
 """
 function PaSampleFormat_to_T(fmt::PaSampleFormat)
     retval = UInt8(0x0)
@@ -309,7 +324,7 @@ function PaSampleFormat_to_T(fmt::PaSampleFormat)
 end
 
 """
-    Get input device data, pass via stream.sbuffer, no rendering
+Get input device data, pass via stream.sbuffer, no rendering
 """
 function pa_input_task(stream::Pa_AudioStream)
     info("PortAudio Input Task Running...")
@@ -319,10 +334,8 @@ function pa_input_task(stream::Pa_AudioStream)
     buffer = zeros(datatype, n * 8)
     try
         while true
-            while Pa_GetStreamReadAvailable(stream.stream) < n
-                sleep(0.005)
-            end
-            while stream.parent_may_use_buffer
+            while (Pa_GetStreamReadAvailable(stream.stream) < n) |
+                                      stream.parent_may_use_buffer
                 sleep(0.005)
             end
             err = ccall((:Pa_ReadStream, libportaudio), PaError,
@@ -340,7 +353,7 @@ function pa_input_task(stream::Pa_AudioStream)
 end
 
 """
-    Send output device data, no rendering
+Send output device data, no rendering
 """
 function pa_output_task(stream::Pa_AudioStream)
     info("PortAudio Output Task Running...")
