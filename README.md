@@ -115,13 +115,20 @@ sound card, the stream calls the `render` method on the root audio mixer, which
 will in turn call the `render` methods on any input AudioNodes that are set
 up as inputs.
 
-With the method Pa_OpenStream, a single stream is opened for reading or writing. 
-This function returns a Pa_AudioStream on success, which is accessed either via
-the functions read_Pa_AudioStream or write_Pa_AudioStream.  If nonblocking I/O is 
-needed, Pa_AudioStream.sbuffer is the I/O buffer, which should be accessed when
-Pa_AudioStream.parent_may_use_buffer is true. After the sbuffer is changed by an 
-nonblocking user, the Pa_audioStream.parent_may_use_buffer field should be set to 
-false to signal that the device subprocess may continue with I/O. This is similar
+When a Pa_AudioStream is created via a call to 
+Pa_AudioStream(device_index, channels=2, input=false,
+                              sample_rate::Integer=44100,
+                              framesPerBuffer::Integer=2048,
+                              show_warnings::Bool=false,
+                              sample_format::PaSampleFormat=paInt16,
+                              callback=0)
+a single stream is opened for reading or writing. This returns a Pa_AudioStream on success, 
+which is used either via the functions AudioIO.read(::Pa_AudioStream) or 
+AudioIO.write(::Pa_AudioStream, buffer) for read and write respectively.
+
+If nonblocking I/O is needed, a callback may be passed to the Pa_AudioStream constructor, 
+which is provided by the user and should return a buffer of frames if used for output and should
+handle a buffer of frames as an argument if sused as input. This is similar
 to the methods used by PyAudio's python interface to PortAudio.
 
 Installation
