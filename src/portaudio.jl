@@ -136,8 +136,7 @@ type Pa_AudioStream <: AudioStream
     show_warnings::Bool
     stream::PaStream
     sformat::PaSampleFormat
-    sbuffer::Array{Real}
-    parent_may_use_buffer::Bool
+    framesPerBuffer::Integer
 
     """ 
         Get device parameters needed for opening with portaudio
@@ -158,66 +157,51 @@ type Pa_AudioStream <: AudioStream
                                callback)
         Pa_StartStream(stream)
         root = AudioMixer()
-        datatype = PaSampleFormat_to_T(sample_format)
-        sbuf = zeros(datatype, framesPerBuffer)
         this = new(root, DeviceInfo(sample_rate, framesPerBuffer), 
-                   show_warnings, stream, sample_format, sbuf, false)
-        if callback == 0
-            info("Scheduling PortAudio Render Task...")
-            if input
-                @schedule(pa_input_task(this))
-            else
-                @schedule(pa_output_task(this))
-            end
-        end
-        this
+                   show_warnings, stream, sample_format, framesPerBuffer)
     end
 end
 
 """
 Blocking read from a Pa_AudioStream that is open as input
 """
-function read(stream::Pa_AudioStream)
+function read(stream::Pa_AudioStream, nframes::Int)
     datatype = PaSampleFormat_to_T(stream.sformat)
-    bufsize = length(stream.sbuffer)
-    ret_buffer = zeros(datatype, bufsize)
+    # bigger ccall buffer to avoid overflow related errors
+    buffer = zeros(datatype, stream.framesPerBuffer * 8)
+    return_buffer = zeros(datatype, nframes * 8)
     cur = 0
-    read_needed = bufsize
-    while stream.parent_may_use_buffer == false
-        sleep(0.001)
-    end
+    read_needed = nframes
     while read_needed > 0
-        read_size = min(read_needed, bufsize)
-        ret_buffer[cur+1: cur+read_size] = stream.sbuffer[1:read_size]
+        read_size = min(read_needed, stream.framesPerBuffer)
+        err = ccall((:Pa_ReadStream, libportaudio), PaError,
+                    (PaStream, Ptr{Void}, Culong),
+                    stream.stream, buffer, read_size) 
+            handle_status(err, stream.show_warnings)
+        return_buffer[cur+1: cur+read_size] = buffer[1:read_size]
         cur = cur + read_size
         read_needed -= read_size
     end
-    stream.parent_may_use_buffer = true
-    ret_buffer
+    return_buffer
 end
 
 """
 Blocking write to a Pa_AudioStream that is open for output
 """
 function write(stream::Pa_AudioStream, buffer)
-    retval = 1
-    sbufsize = length(stream.sbuffer)
-    inputlen = length(buffer)
-    if(inputlen > sbufsize)
-        info("Overflow at write to Pa_AudioStream")
-        retval = 0
-    elseif(inputlen < sbufsize)
-        info("Underflow at write to Pa_AudioStream")
-        retval = -1
+    write_needed = length(buffer)
+    cur = 0
+    while write_needed > 0
+        write_size = min(write_needed, stream.framesPerBuffer)
+        while Pa_GetStreamWriteAvailable(stream.stream) < write_size
+            sleep(0.001)
+        end
+        Pa_WriteStream(stream.stream, buffer[cur+1: cur+write_size], 
+                       write_size, stream.show_warnings)
+        cur = cur + write_size
+        write_needed -= write_size
     end
-    while stream.parent_may_use_buffer == false
-        sleep(0.001)
-    end
-    for idx in 1:min(sbufsize, inputlen)
-        stream.sbuffer[idx] = buffer[idx]
-    end
-    stream.parent_may_use_buffer = false
-    retval
+    0
 end
 
 """
@@ -251,13 +235,14 @@ function make_c_callback(julia_callback, sample_format::PaSampleFormat)
                        udata::Ptr{Void})
         if input != 0
             # input stream
-            julia_callback(Array{datatype}(input))
+            julia_callback(pointer_to_array(Ptr{datatype}(input), 
+                           (frameCount, )))
         else
             # output stream
             buf = julia_callback(0)
             datatype = PaSampleFormat_to_T(sample_format)
-            obuf = Array{datatype}(output)
-            output[1:length(buf)] = buf[1:length(buf)]
+            parray = Ptr{datatype}(buf)
+            obuf = pointer_to_array(parray, (frameCount, ))
         end
         0
     end
@@ -321,58 +306,6 @@ function PaSampleFormat_to_T(fmt::PaSampleFormat)
         info("Flawed input to PaSampleFormat_to_T, primitive unknown")
     end
     typeof(retval)
-end
-
-"""
-Get input device data, pass via stream.sbuffer, no rendering
-"""
-function pa_input_task(stream::Pa_AudioStream)
-    info("PortAudio Input Task Running...")
-    n = bufsize(stream)
-    datatype = PaSampleFormat_to_T(stream.sformat)
-    # bigger ccall buffer to avoid overflow related errors
-    buffer = zeros(datatype, n * 8)
-    try
-        while true
-            while (Pa_GetStreamReadAvailable(stream.stream) < n) |
-                                      stream.parent_may_use_buffer
-                sleep(0.005)
-            end
-            err = ccall((:Pa_ReadStream, libportaudio), PaError,
-                        (PaStream, Ptr{Void}, Culong),
-                        stream.stream, buffer, n) 
-            handle_status(err, stream.show_warnings)
-            stream.sbuffer[1: n] = buffer[1: n]
-            stream.parent_may_use_buffer = true
-            sleep(0.005)
-        end
-    catch ex
-        warn("Audio Input Task died with exception: $ex")
-        Base.show_backtrace(STDOUT, catch_backtrace())
-    end
-end
-
-"""
-Send output device data, no rendering
-"""
-function pa_output_task(stream::Pa_AudioStream)
-    info("PortAudio Output Task Running...")
-    n = bufsize(stream)
-    try
-        while true
-            if (stream.parent_may_use_buffer == false) &
-               (Pa_GetStreamWriteAvailable(stream.stream) >= n)
-                Pa_WriteStream(stream.stream, stream.sbuffer, 
-                               n, stream.show_warnings)
-                stream.parent_may_use_buffer = true
-            else
-                sleep(0.005)
-            end            
-        end
-    catch ex
-        warn("Audio Output Task died with exception: $ex")
-        Base.show_backtrace(STDOUT, catch_backtrace())
-    end
 end
 
 type PaDeviceInfo
