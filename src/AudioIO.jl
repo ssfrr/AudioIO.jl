@@ -3,7 +3,7 @@ using Compat
 importall Base.Operators
 
 # export the basic API
-export play, stop, get_audio_devices
+export play, stop, get_audio_devices, open_read, open_write, read, write
 
 # default stream used when none is given
 _stream = nothing
