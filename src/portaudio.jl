@@ -162,6 +162,29 @@ type Pa_AudioStream <: AudioStream
     end
 end
 
+function open_read(device_index, channels=2, input=true,
+                   sample_rate::Integer=44100, 
+                   framesPerBuffer::Integer=2048,
+                   show_warnings::Bool=false,
+                   sample_format::PaSampleFormat=paInt16,
+                   callback=0)
+    Pa_AudioStream(device_index, channels, input, sample_rate,
+                   framesPerBuffer, show_warnings,
+                   sample_format, callback)
+end
+
+function open_write(device_index, channels=2, input=false,
+                   sample_rate::Integer=44100, 
+                   framesPerBuffer::Integer=2048,
+                   show_warnings::Bool=false,
+                   sample_format::PaSampleFormat=paInt16,
+                   callback=0)
+    Pa_AudioStream(device_index, channels, input, sample_rate,
+                   framesPerBuffer, show_warnings,
+                   sample_format, callback)
+end
+
+
 """
 Blocking read from a Pa_AudioStream that is open as input
 """
