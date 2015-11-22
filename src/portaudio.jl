@@ -136,6 +136,7 @@ type Pa_AudioStream <: AudioStream
     show_warnings::Bool
     stream::PaStream
     sformat::PaSampleFormat
+    channels::Integer
     framesPerBuffer::Integer
 
     """ 
@@ -158,28 +159,29 @@ type Pa_AudioStream <: AudioStream
         Pa_StartStream(stream)
         root = AudioMixer()
         this = new(root, DeviceInfo(sample_rate, framesPerBuffer), 
-                   show_warnings, stream, sample_format, framesPerBuffer)
+                   show_warnings, stream, sample_format, 
+                   channels, framesPerBuffer)
     end
 end
 
-function open_read(device_index, channels=2, input=true,
+function open_read(device_index, channels=2,
                    sample_rate::Integer=44100, 
                    framesPerBuffer::Integer=2048,
                    show_warnings::Bool=false,
                    sample_format::PaSampleFormat=paInt16,
                    callback=0)
-    Pa_AudioStream(device_index, channels, input, sample_rate,
+    Pa_AudioStream(device_index, channels, true, sample_rate,
                    framesPerBuffer, show_warnings,
                    sample_format, callback)
 end
 
-function open_write(device_index, channels=2, input=false,
+function open_write(device_index, channels=2,
                    sample_rate::Integer=44100, 
                    framesPerBuffer::Integer=2048,
                    show_warnings::Bool=false,
                    sample_format::PaSampleFormat=paInt16,
                    callback=0)
-    Pa_AudioStream(device_index, channels, input, sample_rate,
+    Pa_AudioStream(device_index, channels, false, sample_rate,
                    framesPerBuffer, show_warnings,
                    sample_format, callback)
 end
@@ -190,19 +192,19 @@ Blocking read from a Pa_AudioStream that is open as input
 """
 function read(stream::Pa_AudioStream, nframes::Int)
     datatype = PaSampleFormat_to_T(stream.sformat)
-    # bigger ccall buffer to avoid overflow related errors
-    buffer = zeros(datatype, stream.framesPerBuffer * 8)
-    return_buffer = zeros(datatype, nframes * 8)
+    buf = zeros(datatype, stream.framesPerBuffer * stream.channels)
+    return_buffer = zeros(datatype, nframes * stream.channels)
     cur = 0
     read_needed = nframes
     while read_needed > 0
         read_size = min(read_needed, stream.framesPerBuffer)
+        used = read_size * stream.channels
         err = ccall((:Pa_ReadStream, libportaudio), PaError,
                     (PaStream, Ptr{Void}, Culong),
-                    stream.stream, buffer, read_size) 
-            handle_status(err, stream.show_warnings)
-        return_buffer[cur+1: cur+read_size] = buffer[1:read_size]
-        cur = cur + read_size
+                    stream.stream, buf, read_size) 
+        handle_status(err, stream.show_warnings)
+        return_buffer[cur + 1: cur + used] = buf[1:used]
+        cur = cur + used
         read_needed -= read_size
     end
     return_buffer
@@ -211,22 +213,48 @@ end
 """
 Blocking write to a Pa_AudioStream that is open for output
 """
-function write(stream::Pa_AudioStream, buffer)
-    write_needed = length(buffer)
+function write(ostream::Pa_AudioStream, buffer)
     cur = 0
+    write_needed = length(buffer)
     while write_needed > 0
-        write_size = min(write_needed, stream.framesPerBuffer)
-        while Pa_GetStreamWriteAvailable(stream.stream) < write_size
+        write_size = min(write_needed, ostream.framesPerBuffer)
+        while Pa_GetStreamWriteAvailable(ostream.stream) < write_size
             sleep(0.001)
         end
-        Pa_WriteStream(stream.stream, buffer[cur+1: cur+write_size], 
-                       write_size, stream.show_warnings)
-        cur = cur + write_size
+        end_cur = cur + write_size
+        ccall((:Pa_WriteStream, libportaudio), PaError,
+              (PaStream, Ptr{Void}, Culong), ostream.stream, 
+              buffer[cur + 1: end_cur], Culong(write_size/ostream.channels))
         write_needed -= write_size
+        cur = end_cur
     end
     0
 end
 
+type CCallbackTimeInfo
+   inAdc::Cdouble
+   current::Cdouble
+   outAdc::Cdouble
+end
+typealias PaStreamCallbackFlags Culong
+
+function callback(output::Ptr{Void}, input::Ptr{Void}, 
+                  frameCount::Culong, 
+                  timeInfo::Ptr{AudioIO.CCallbackTimeInfo}, 
+                  sflags::Culong, udata::Ptr{Void})
+    global julia_callback
+    if input
+        # input stream
+        julia_callback(pointer_to_array(Ptr{datatype}(input), 
+                    (frameCount, )))
+    else
+        # output stream
+        buf = julia_callback(0)
+        parray = Ptr{datatype}(buf)
+        obuf = pointer_to_array(parray, (frameCount, ))
+    end
+    Cint(0)
+end
 """
 Callback helper function
 takes a function to process the data when the callback occurs, 
@@ -242,36 +270,12 @@ Returns a C function of this type:
                                PaStreamCallbackFlags statusFlags, 
                                void *userData)
 """
-function make_c_callback(julia_callback, sample_format::PaSampleFormat)
-    type CCallbackTimeInfo
-       inAdc::Cdouble
-       current::Cdouble
-       outAdc::Cdouble
-    end
-    typealias PaStreamCallbackFlags Culong
-    userData = Ptr{Void}(0)
-    
-    function callback(output::Ptr{Void}, input::Ptr{Void}, 
-                       frameCount::Culong, 
-                       timeInfo::Ptr{CCallBackTimeInfo}, 
-                       sflags::PaStreamCallbackFlags,
-                       udata::Ptr{Void})
-        if input != 0
-            # input stream
-            julia_callback(pointer_to_array(Ptr{datatype}(input), 
-                           (frameCount, )))
-        else
-            # output stream
-            buf = julia_callback(0)
-            datatype = PaSampleFormat_to_T(sample_format)
-            parray = Ptr{datatype}(buf)
-            obuf = pointer_to_array(parray, (frameCount, ))
-        end
-        0
-    end
+function make_c_callback(jul_callback, sample_format::PaSampleFormat)
+    datatype = PaSampleFormat_to_T(sample_format)
+    julia_callback = jul_callback
     const c_callback = cfunction(callback, Cint,
                                  (Ptr{Void}, Ptr{Void}, 
-                                  Culong, Ptr{CCallBackTimeInfo}, 
+                                  Culong, Ptr{AudioIO.CCallbackTimeInfo}, 
                                   Culong, Ptr{Void}))
     return c_callback
 end
