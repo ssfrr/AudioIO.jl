@@ -199,6 +199,10 @@ function read(stream::Pa_AudioStream, nframes::Int)
     while read_needed > 0
         read_size = min(read_needed, stream.framesPerBuffer)
         used = read_size * stream.channels
+        while Pa_GetStreamReadAvailable(stream.stream) < read_size
+            sleep(0.001)
+            yield()
+        end
         err = ccall((:Pa_ReadStream, libportaudio), PaError,
                     (PaStream, Ptr{Void}, Culong),
                     stream.stream, buf, read_size) 
@@ -220,6 +224,7 @@ function write(ostream::Pa_AudioStream, buffer)
         write_size = min(write_needed, ostream.framesPerBuffer)
         while Pa_GetStreamWriteAvailable(ostream.stream) < write_size
             sleep(0.001)
+            yield()
         end
         end_cur = cur + write_size
         err = ccall((:Pa_WriteStream, libportaudio), PaError,
