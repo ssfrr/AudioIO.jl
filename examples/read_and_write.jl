@@ -18,7 +18,6 @@ choose the devices for 2 channel IO
 """
 function choose_input_output()
     devices = get_audio_devices()
-@test length(devices) > 0
     indev = -1
     outdev = -1
     for aud in devices
@@ -39,8 +38,6 @@ function choose_input_output()
              " and output device ", bytestring(devices[outdev + 1].name), 
              ", number ", devices[outdev + 1].device_index)
     end
-@test indev >= 0  
-@test outdev >= 0  
     return indev, outdev
 end
 
