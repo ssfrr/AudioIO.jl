@@ -274,7 +274,7 @@ Returns a C function of this type:
 """
 function make_c_callback(jul_callback, sample_format::PaSampleFormat)
     datatype = PaSampleFormat_to_T(sample_format)
-    julia_callback = jul_callback
+    global julia_callback = jul_callback
     const c_callback = cfunction(callback, Cint,
                                  (Ptr{Void}, Ptr{Void}, 
                                   Culong, Ptr{AudioIO.CCallbackTimeInfo}, 
