@@ -222,9 +222,11 @@ function write(ostream::Pa_AudioStream, buffer)
             sleep(0.001)
         end
         end_cur = cur + write_size
-        ccall((:Pa_WriteStream, libportaudio), PaError,
-              (PaStream, Ptr{Void}, Culong), ostream.stream, 
-              buffer[cur + 1: end_cur], Culong(write_size/ostream.channels))
+        err = ccall((:Pa_WriteStream, libportaudio), PaError,
+                    (PaStream, Ptr{Void}, Culong), ostream.stream, 
+                    buffer[cur + 1: end_cur], 
+                    Culong(write_size/ostream.channels))
+        handle_status(err, ostream.show_warnings)
         write_needed -= write_size
         cur = end_cur
     end
