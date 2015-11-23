@@ -6,6 +6,7 @@ using AudioIO
 
 CHUNKSIZE = 40960
 FORMAT = AudioIO.paInt16
+CALLBACK_DATATYPE = AudioIO.PaSampleFormat_to_T(FORMAT)
 CHANNELS = 2
 SRATE = 44100
 RECORD_SECONDS = 3
@@ -63,60 +64,67 @@ function write_blocking(devnum, buffer)
 end
 
 read_position = 0
-write_position = 0
-"""
-read callback function
-"""
-function rcallback(buf)
-    println("In read callback")
+function read_callback(input::Ptr{Void}, output::Ptr{Void}, 
+                  frameCount::Culong, 
+                  timeInfo::Ptr{AudioIO.CCallbackTimeInfo}, 
+                  sflags::Culong, udata::Ptr{Void})
     global read_position
+    buf = pointer_to_array(Ptr{CALLBACK_DATATYPE}(input), 
+                           (frameCount * CHANNELS, ))
     read_size = length(buf)
     if read_position + read_size > length(BUFFER)
         read_size = length(BUFFER) - read_position
     end
-    if read_size > 1
+    if read_size > 0
         BUFFER[read_position + 1 : read_position + read_size] = 
             buf[1: read_size]
         read_position += read_size
     end
     0
 end
-    
-"""
-write callback function
-"""
-function wcallback(buffer)
-    println("In write callback")
+
+write_position = 0
+function write_callback(input::Ptr{Void}, output::Ptr{Void}, 
+                  frameCount::Culong, 
+                  timeInfo::Ptr{AudioIO.CCallbackTimeInfo}, 
+                  sflags::Culong, udata::Ptr{Void})
     global write_position
-    write_size = CHUNKSIZE * CHANNELS
+    write_size = frameCount * CHANNELS
     if write_position + write_size > length(BUFFER)
-        write_size = length(BUFFER) - write_position
-    end
-    if write_size < 2
-       return Void
+        write_position = length(BUFFER) - write_size
     end
     start_position = write_position + 1
     write_position += write_size
     buf = BUFFER[start_position: write_position]
-    buf
+    ccall(:memcpy, Ptr{Void}, (Ptr{Void}, Ptr{Void}, Cint), 
+          output, buf, write_size * 2)
+    0
 end
+
+const r_c_callback = cfunction(read_callback, Cint, (Ptr{Void}, 
+                               Ptr{Void}, 
+                               Culong, Ptr{AudioIO.CCallbackTimeInfo}, 
+                               Culong, Ptr{Void}))
+
+const w_c_callback = cfunction(write_callback, Cint, (Ptr{Void}, 
+                               Ptr{Void}, 
+                               Culong, Ptr{AudioIO.CCallbackTimeInfo}, 
+                               Culong, Ptr{Void}))
 
 """
 read using callback
 """
 function start_read_callback(devnum)
-    AudioIO.open_read(devnum, CHANNELS, SRATE, CHUNKSIZE,
-                      false, FORMAT,
-                      AudioIO.make_c_callback(rcallback, FORMAT))
+    rstream = AudioIO.open_read(devnum, CHANNELS, SRATE, CHUNKSIZE,
+                                false, FORMAT, r_c_callback)
 end
 
 """
 write using callback
 """
 function start_write_callback(devnum)
-    AudioIO.open_write(devnum, CHANNELS, SRATE, CHUNKSIZE, 
-                       false, FORMAT,
-                       AudioIO.make_c_callback(wcallback, FORMAT))
+    wstream = AudioIO.open_write(devnum, CHANNELS, SRATE, CHUNKSIZE, 
+                                 false, FORMAT, w_c_callback)
 end
 
 function make_note_buffer(frequency, amplitude, duration, srate)
@@ -143,27 +151,29 @@ INS, OUTS = choose_input_output()
 
 read_blocking(INS, BUFFER)
 println("Finished blocking type reading device number $INS")
-println("Recording volume is $(mean(abs(BUFFER))*(100/32767))% of max")
-sleep(3)
+println("Recording volume is $(mean(abs(BUFFER))*(100/16783))% of max")
+sleep(2)
+
 write_blocking(OUTS, BUFFER)
 println("Finished blocking type writing device number $OUTS")
 
-start_read_callback(INS)
+istream = start_read_callback(INS)
 println("Started callback type reading device number $INS")
+sleep(3)
+AudioIO.Pa_CloseStream(istream.stream)
 
 BUFFER = make_note_buffer(88.0, 0.4, 3, SRATE)
 ostream = start_write_callback(OUTS)
 println("Started callback type writing device number $OUTS")
+sleep(3)
 AudioIO.Pa_CloseStream(ostream.stream)
 
 outstream = AudioIO.open_write(OUTS, CHANNELS, SRATE, CHUNKSIZE)
-
 # play the C major scale
 scale = [130.8, 146.8, 164.8, 174.6, 195.0, 220.0, 246.9, 261.6]
 for note in scale
     play_note(note, 0.1, 0.75, SRATE, outstream)
 end
-
 # up an octave
 for note in scale[2:8]
     play_note(2*note, 0.1, 0.75, SRATE, outstream)
