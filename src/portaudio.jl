@@ -205,7 +205,7 @@ function read(stream::Pa_AudioStream, nframes::Int)
         end
         err = ccall((:Pa_ReadStream, libportaudio), PaError,
                     (PaStream, Ptr{Void}, Culong),
-                    stream.stream, buf, read_size) 
+                    stream.stream, buf, read_size)
         handle_status(err, stream.show_warnings)
         return_buffer[cur + 1: cur + used] = buf[1:used]
         cur = cur + used
@@ -250,15 +250,18 @@ function callback(output::Ptr{Void}, input::Ptr{Void},
                   timeInfo::Ptr{AudioIO.CCallbackTimeInfo}, 
                   sflags::Culong, udata::Ptr{Void})
     global julia_callback
+    global callback_datatype
     if input
         # input stream
-        julia_callback(pointer_to_array(Ptr{datatype}(input), 
+        julia_callback(pointer_to_array(Ptr{callback_datatype}(input), 
                     (frameCount, )))
     else
         # output stream
         buf = julia_callback(0)
-        parray = Ptr{datatype}(buf)
-        obuf = pointer_to_array(parray, (frameCount, ))
+        bufsize = length(buf)
+        optr = Ptr{callback_datatype}(output)
+        oarray = unsafe_pointer_to_objref(optr)
+        oarray[1:bufsize] = buf[1:bufsize]
     end
     Cint(0)
 end
@@ -278,7 +281,7 @@ Returns a C function of this type:
                                void *userData)
 """
 function make_c_callback(jul_callback, sample_format::PaSampleFormat)
-    datatype = PaSampleFormat_to_T(sample_format)
+    global callback_datatype = PaSampleFormat_to_T(sample_format)
     global julia_callback = jul_callback
     const c_callback = cfunction(callback, Cint,
                                  (Ptr{Void}, Ptr{Void}, 
