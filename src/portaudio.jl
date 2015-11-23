@@ -103,7 +103,7 @@ function Pa_OpenStream(device::PaDeviceIndex, channels::Cint,
     ioParameters = Pa_StreamParameters(device, channels, 
                                        sampleFormat, PaTime(0.001), 
                                        Ptr{Void}(0))
-    streamcallback = Ptr{PaStreamCallback}(0) 
+    streamcallback = Ptr{PaStreamCallback}(callback) 
     if callback != 0
         if input
         else
@@ -245,50 +245,6 @@ type CCallbackTimeInfo
 end
 typealias PaStreamCallbackFlags Culong
 
-function callback(output::Ptr{Void}, input::Ptr{Void}, 
-                  frameCount::Culong, 
-                  timeInfo::Ptr{AudioIO.CCallbackTimeInfo}, 
-                  sflags::Culong, udata::Ptr{Void})
-    global julia_callback
-    global callback_datatype
-    if input
-        # input stream
-        julia_callback(pointer_to_array(Ptr{callback_datatype}(input), 
-                    (frameCount, )))
-    else
-        # output stream
-        buf = julia_callback(0)
-        bufsize = length(buf)
-        optr = Ptr{callback_datatype}(output)
-        oarray = unsafe_pointer_to_objref(optr)
-        oarray[1:bufsize] = buf[1:bufsize]
-    end
-    Cint(0)
-end
-"""
-Callback helper function
-takes a function to process the data when the callback occurs, 
-plus the number of frames to be passes each callback, 
-plus an input buffer which is 0 if for output and size framesPerBuffer
-if for input. Function should return a buffer of framesPerBuffer frames
-if for output, should process the input_buffer argument if for output
-
-Returns a C function of this type:
-  typedef int PaStreamCallback(const void *input, void *output, 
-                               unsigned long frameCount, 
-                               const PaStreamCallbackTimeInfo *timeInfo, 
-                               PaStreamCallbackFlags statusFlags, 
-                               void *userData)
-"""
-function make_c_callback(jul_callback, sample_format::PaSampleFormat)
-    global callback_datatype = PaSampleFormat_to_T(sample_format)
-    global julia_callback = jul_callback
-    const c_callback = cfunction(callback, Cint,
-                                 (Ptr{Void}, Ptr{Void}, 
-                                  Culong, Ptr{AudioIO.CCallbackTimeInfo}, 
-                                  Culong, Ptr{Void}))
-    return c_callback
-end
 
 ############ Internal Functions ############
 
