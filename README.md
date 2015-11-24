@@ -133,7 +133,8 @@ for streams opened for reading and writing, respectively.
 
 If nonblocking I/O is needed, a callback may be passed to the open_read or open_write methods,
 which is provided by the user and should return a buffer of frames if used for output and should
-handle a buffer of frames as an argument if used as input. 
+handle a buffer of frames as an argument if used as input, as shown in the examples folder in 
+this package.
 
 Installation
 ------------
