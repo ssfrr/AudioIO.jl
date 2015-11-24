@@ -6,7 +6,6 @@ using AudioIO
 
 CHUNKSIZE = 40960
 FORMAT = AudioIO.paInt16
-CALLBACK_DATATYPE = AudioIO.PaSampleFormat_to_T(FORMAT)
 CHANNELS = 2
 SRATE = 44100
 RECORD_SECONDS = 3
@@ -63,70 +62,9 @@ function write_blocking(devnum, buffer)
     AudioIO.Pa_CloseStream(outstream.stream)
 end
 
-read_position = 0
-function read_callback(input::Ptr{Void}, output::Ptr{Void}, 
-                  frameCount::Culong, 
-                  timeInfo::Ptr{AudioIO.CCallbackTimeInfo}, 
-                  sflags::Culong, udata::Ptr{Void})
-    global read_position
-    buf = pointer_to_array(Ptr{CALLBACK_DATATYPE}(input), 
-                           (frameCount * CHANNELS, ))
-    read_size = length(buf)
-    if read_position + read_size > length(BUFFER)
-        read_size = length(BUFFER) - read_position
-    end
-    if read_size > 0
-        BUFFER[read_position + 1 : read_position + read_size] = 
-            buf[1: read_size]
-        read_position += read_size
-    end
-    0
-end
-
-write_position = 0
-function write_callback(input::Ptr{Void}, output::Ptr{Void}, 
-                  frameCount::Culong, 
-                  timeInfo::Ptr{AudioIO.CCallbackTimeInfo}, 
-                  sflags::Culong, udata::Ptr{Void})
-    global write_position
-    write_size = frameCount * CHANNELS
-    if write_position + write_size > length(BUFFER)
-        write_position = length(BUFFER) - write_size
-    end
-    start_position = write_position + 1
-    write_position += write_size
-    buf = BUFFER[start_position: write_position]
-    ccall(:memcpy, Ptr{Void}, (Ptr{Void}, Ptr{Void}, Cint), 
-          output, buf, write_size * 2)
-    0
-end
-
-const r_c_callback = cfunction(read_callback, Cint, (Ptr{Void}, 
-                               Ptr{Void}, 
-                               Culong, Ptr{AudioIO.CCallbackTimeInfo}, 
-                               Culong, Ptr{Void}))
-
-const w_c_callback = cfunction(write_callback, Cint, (Ptr{Void}, 
-                               Ptr{Void}, 
-                               Culong, Ptr{AudioIO.CCallbackTimeInfo}, 
-                               Culong, Ptr{Void}))
-
 """
-read using callback
+Create a string of numbers representing a sinewave audio tone
 """
-function start_read_callback(devnum)
-    rstream = AudioIO.open_read(devnum, CHANNELS, SRATE, CHUNKSIZE,
-                                false, FORMAT, r_c_callback)
-end
-
-"""
-write using callback
-"""
-function start_write_callback(devnum)
-    wstream = AudioIO.open_write(devnum, CHANNELS, SRATE, CHUNKSIZE, 
-                                 false, FORMAT, w_c_callback)
-end
-
 function make_note_buffer(frequency, amplitude, duration, srate)
     N = round(Int, srate / frequency)
     T = round(Int, frequency * duration)  # repeat for T cycles
@@ -142,6 +80,9 @@ function make_note_buffer(frequency, amplitude, duration, srate)
     tone
 end
 
+"""
+Write a note to output device
+"""
 function play_note(frequency, amplitude, duration, srate, ostream)
     note = make_note_buffer(frequency, amplitude, duration, srate)
     AudioIO.write(ostream, note)
@@ -156,17 +97,6 @@ sleep(2)
 
 write_blocking(OUTS, BUFFER)
 println("Finished blocking type writing device number $OUTS")
-
-istream = start_read_callback(INS)
-println("Started callback type reading device number $INS")
-sleep(3)
-AudioIO.Pa_CloseStream(istream.stream)
-
-BUFFER = make_note_buffer(88.0, 0.4, 3, SRATE)
-ostream = start_write_callback(OUTS)
-println("Started callback type writing device number $OUTS")
-sleep(3)
-AudioIO.Pa_CloseStream(ostream.stream)
 
 outstream = AudioIO.open_write(OUTS, CHANNELS, SRATE, CHUNKSIZE)
 # play the C major scale
