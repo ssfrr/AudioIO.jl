@@ -115,26 +115,21 @@ sound card, the stream calls the `render` method on the root audio mixer, which
 will in turn call the `render` methods on any input AudioNodes that are set
 up as inputs.
 
-For opening an audio device for either reading or writing but not both, the functions 
-open_read(device_index, channels=2, sample_rate::Integer=44100, 
-          framesPerBuffer::Integer=2048, show_warnings::Bool=false,
-          sample_format::PaSampleFormat=paInt16, callback=0)
+When a Pa_AudioStream is created via a call to 
+Pa_AudioStream(device_index, channels=2, input=false,
+                              sample_rate::Integer=44100,
+                              framesPerBuffer::Integer=2048,
+                              show_warnings::Bool=false,
+                              sample_format::PaSampleFormat=paInt16,
+                              callback=0)
+a single stream is opened for reading or writing. This returns a Pa_AudioStream on success, 
+which is used either via the functions AudioIO.read(::Pa_AudioStream) or 
+AudioIO.write(::Pa_AudioStream, buffer) for read and write respectively.
 
-and
-open_write(device_index, channels=2, sample_rate::Integer=44100, 
-          framesPerBuffer::Integer=2048, show_warnings::Bool=false,
-          sample_format::PaSampleFormat=paInt16, callback=0)
-
-are provided. These return a Pa_Audiostream which can be used with the blocking I/O functions 
-read(stream::Pa_AudioStream, nframes::Int) (returns an array of frames)
-and 
-write(stream::Pa_AudioStream, buffer) 
-for streams opened for reading and writing, respectively.
-
-If nonblocking I/O is needed, a callback may be passed to the open_read or open_write methods,
+If nonblocking I/O is needed, a callback may be passed to the Pa_AudioStream constructor, 
 which is provided by the user and should return a buffer of frames if used for output and should
-handle a buffer of frames as an argument if used as input, as shown in the examples folder in 
-this package.
+handle a buffer of frames as an argument if used as input. This is similar
+to the methods used by PyAudio's python interface to PortAudio. See the examples also.
 
 Installation
 ------------
