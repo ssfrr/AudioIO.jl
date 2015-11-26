@@ -271,7 +271,7 @@ function callback_wrapper(input::Ptr{Void}, output::Ptr{Void},
         ccall(:memcpy, Ptr{Void}, (Ptr{Void}, Ptr{Void}, Cint), 
               output, outdata, length(outdata) * sizeof(outdata[1]))    
     end
-    0
+    Cint(0)
 end
 
 const pa_callback = cfunction(callback_wrapper, Cint, (Ptr{Void}, 
