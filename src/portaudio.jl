@@ -110,12 +110,12 @@ end
     The stream is unidirectional, either input or default output
     see http://portaudio.com/docs/v19-doxydocs/portaudio_8h.html
 """
-function Pa_OpenStream(device::PaDeviceIndex, channels::Cint, 
+function Pa_OpenStream(device::PaDeviceIndex, channels::Integer, 
                        input::Bool, sampleFormat::PaSampleFormat,
                        sampleRate::Cdouble, framesPerBuffer::Culong,
                        callback, udata)
     streamPtr::Array{PaStream} = PaStream[1]
-    ioParameters = Pa_StreamParameters(device, channels, 
+    ioParameters = Pa_StreamParameters(device, Cint(channels), 
                                        sampleFormat, PaTime(0.001), 
                                        Ptr{Void}(0))
     streamcallback = Ptr{PaStreamCallback}(callback) 
