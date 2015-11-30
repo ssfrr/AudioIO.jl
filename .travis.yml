@@ -1,21 +1,17 @@
-language: cpp
-compiler:
-  - clang
+language: julia
+os:
+  - linux
+julia:
+  - 0.3
+  # - 0.4  # fails
+  # - 0.5  # fails
 notifications:
   email: spencer.f.russell@gmail.com
-env:
-    - JULIAVERSION="julianightlies"
-    - JULIAVERSION="juliareleases"
+sudo: true
 before_install:
-  - sudo add-apt-repository ppa:staticfloat/julia-deps -y
-  - sudo add-apt-repository ppa:staticfloat/$JULIAVERSION -y
-  - sudo apt-get update -qq -y
-  - sudo apt-get install libpcre3-dev julia -y
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
-script:
-  - julia -e 'Pkg.init()'
   - julia -e 'Pkg.add("BinDeps"); Pkg.checkout("BinDeps")' # latest master needed for Pacman support
-  - julia -e 'Pkg.clone(pwd()); Pkg.build("AudioIO")'
-  - julia -e 'Pkg.test("AudioIO", coverage=true)'
+script:
+  - julia --check-bounds=yes -e 'Pkg.clone(pwd()); Pkg.build("AudioIO"); Pkg.test("AudioIO"; coverage=true)'
 after_success:
-- if [ $JULIAVERSION = "juliareleases" ]; then julia -e 'cd(Pkg.dir("AudioIO")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'; fi
+  - julia -e 'cd(Pkg.dir("AudioIO")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
