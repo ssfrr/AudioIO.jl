@@ -46,7 +46,7 @@ read from input
 """
 function record_audio(devnum, seconds)
     instream = AudioIO.open_read(devnum, CHANNELS, SRATE, CHUNKSIZE)
-    bufsize = seconds * SRATE * CHANNELS
+    bufsize = seconds * SRATE
     buf = AudioIO.read(instream, bufsize)
     AudioIO.Pa_CloseStream(instream.stream)
     buf
