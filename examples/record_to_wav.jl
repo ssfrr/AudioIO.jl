@@ -66,7 +66,7 @@ INS, OUTS = choose_input_output()
 println("Starting recording...")
 BUF = record_audio(INS, RECORD_SECONDS)
 println("Finished reading from device number $INS")
-println("Recording volume was $(mean(abs(BUF))*(100/16783))% of max")
+println("Mean recording volume was $(mean(abs(BUF))*(100/16783))% of max")
 
 write_as_WAV(BUF)
 println("Finished writing to WAV file.")
