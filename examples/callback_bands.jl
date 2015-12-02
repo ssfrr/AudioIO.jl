@@ -6,10 +6,6 @@
 
 using AudioIO, DSP
 
-CHUNKSIZE = 40960
-FORMAT = AudioIO.paInt16
-CHANNELS = Cint(2)
-SRATE = 44100
 
 """
 Custom callback for read, processes passed data array
@@ -25,6 +21,10 @@ function process_read(buf)
     println("bass $bass, midrange $midrange, treble $treble")
 end
 
+CHUNKSIZE = 40960
+FORMAT = AudioIO.paInt16
+CHANNELS = Cint(2)
+SRATE = 44100
 istream = AudioIO.open_read(Cint(0), CHANNELS, SRATE, CHUNKSIZE,
                             false, FORMAT, process_read)
 println("Starting callback type reading, control-C to stop")
