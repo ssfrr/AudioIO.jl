@@ -8,11 +8,9 @@ using AudioIO, DSP
 
 CHUNKSIZE = 40960
 FORMAT = AudioIO.paInt16
-CALLBACK_DATATYPE = AudioIO.PaSampleFormat_to_T(FORMAT)
 CHANNELS = Cint(2)
 SRATE = 44100
 
-read_position = 0
 """
 Custom callback for read, processes passed data array
 """
