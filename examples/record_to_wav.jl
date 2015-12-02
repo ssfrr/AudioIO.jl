@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
-# Example for Julia AudioIO module
-# uses the WAV.jl package
+# Examples for Julia AudioIO module
 
 using AudioIO
 using WAV
@@ -57,17 +56,23 @@ write to WAV file
 """
 function write_as_WAV(buffer, filename="temp.WAV")
     fio = open(filename, "w")
-    WAV.wavwrite(buffer, fio, Fs=SRATE*CHANNELS)
+    WAV.wavwrite(deinterlace_stereo(buffer), fio, Fs=SRATE)
 end
 
+"""
+interlaced to noninterlaced stereo data
+"""
+function deinterlace_stereo(buffer)
+    reshape([buffer[1:2:end]; buffer[2:2:end]], 
+            (floor(Int, length(buffer)/2), 2))
+end
 
 INS, OUTS = choose_input_output()
 
 println("Starting recording...")
 BUF = record_audio(INS, RECORD_SECONDS)
 println("Finished reading from device number $INS")
-println("Mean recording volume was $(mean(abs(BUF))*(100/16783))% of max")
+println("Recording volume was $(mean(abs(BUF))*(100/16783))% of max")
 
 write_as_WAV(BUF)
 println("Finished writing to WAV file.")
-
