@@ -43,22 +43,42 @@ function render(node::EnvelopeFollower, device_input::AudioIO.AudioBuf, info::Au
         node.y_last[2] = node.y_last[1]
         node.x_last[1] = abs(device_input[i])
         node.y_last[1] = y[i]
-
     end
 
+    return y
+end
+
+
+#
+# Envelope Plotter
+#
+
+type EnvelopePlotter <: AudioIO.AudioRenderer
+    in1::AudioIO.AudioNode
+    scale_factor::Int
+    screen_width::Int
+
+    EnvelopePlotter(a::AudioIO.AudioNode, f, w) = new(a, f, w)
+    EnvelopePlotter(a::AudioIO.AudioNode) = new(a, 500, 150)
+    EnvelopePlotter() = new(AudioInput(), 500, 150)
+end
+
+typealias PlotterNode AudioIO.AudioNode{EnvelopePlotter}
+
+function render(node::EnvelopePlotter, device_input::AudioIO.AudioBuf, info::AudioIO.DeviceInfo)
+
+    input = render(node.in1, device_input, info)
+
     # Display envelope meter
-    SCREEN_WIDTH = 150
-    SCALE_FACTOR = 5000
     print("\u1b[1G")
     print("\u1b[K")
-    val = abs(round(Int, SCALE_FACTOR * y[1]))
-    if val > SCREEN_WIDTH
-        val = SCREEN_WIDTH
+    val = abs(round(Int, node.scale_factor * input[1]))
+    if val > node.screen_width
+        val = node.screen_width
     end
     solidglyph="█"
     print(string(val, "  |", repeat(solidglyph, val)))
-
-    return y
+    return input
 end
 
 
@@ -66,7 +86,18 @@ end
 # Run
 #
 
-n = EnvelopeNode(5, 44100)
-AudioIO.play(n)
-sleep(30)
-stop(n)
+
+p = PlotterNode(EnvelopeNode(5, 44100))
+play(p)
+sleep(0.00001)
+@printf("\n\nFollow Envelope\n")
+sleep(10)
+stop(p)
+
+@printf("\n\nFollow Absolute Signal\n")
+p = PlotterNode()
+play(p)
+sleep(10)
+stop(p)
+
+
