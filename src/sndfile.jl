@@ -39,6 +39,7 @@ samplerate(f::AudioFile) = f.sfinfo.samplerate
 
 # AudioIO.open is part of the public API, but is not exported so that it
 # doesn't conflict with Base.open
+import Base.open
 function open(path::AbstractString, mode::AbstractString = "r",
             sampleRate::Integer = 44100, channels::Integer = 1,
             format::Integer = 0)
