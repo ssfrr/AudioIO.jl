@@ -104,7 +104,7 @@ function Pa_OpenStream(device::PaDeviceIndex,
                                        sampleFormat, PaTime(0.001),
                                        Ptr{Void}(0))
     if input
-        err = ccall((:Pa_OpenStream, libportaudio), PaError,
+        err = ccall((:Pa_OpenStream, :libportaudio), PaError,
                     (PaStream, Ref{Pa_StreamParameters}, Ptr{Void},
                     Cdouble, Culong, Culong,
                     Ptr{PaStreamCallback}, Ptr{Void}),
@@ -112,7 +112,7 @@ function Pa_OpenStream(device::PaDeviceIndex,
                     sampleRate, framesPerBuffer, 0,
                     Ptr{PaStreamCallback}(0), Ptr{Void}(0))
     else
-        err = ccall((:Pa_OpenStream, libportaudio), PaError,
+        err = ccall((:Pa_OpenStream, :libportaudio), PaError,
                     (PaStream, Ptr{Void}, Ref{Pa_StreamParameters},
                     Cdouble, Culong, Culong,
                     Ptr{PaStreamCallback}, Ptr{Void}),
@@ -274,7 +274,7 @@ function pa_input_task(stream::Pa_AudioStream)
             while stream.parent_may_use_buffer
                 sleep(0.005)
             end
-            err = ccall((:Pa_ReadStream, libportaudio), PaError,
+            err = ccall((:Pa_ReadStream, :libportaudio), PaError,
                         (PaStream, Ptr{Void}, Culong),
                         stream.stream, buffer, n)
             handle_status(err, stream.show_warnings)
@@ -348,7 +348,7 @@ end
 
 function get_portaudio_devices()
     require_portaudio_init()
-    device_count = ccall((:Pa_GetDeviceCount, libportaudio), PaDeviceIndex, ())
+    device_count = ccall((:Pa_GetDeviceCount, :libportaudio), PaDeviceIndex, ())
     pa_devices = [ [Pa_GetDeviceInfo(i), i] for i in 0:(device_count - 1)]
     [PortAudioInterface(bytestring(d[1].name),
                         bytestring(Pa_GetHostApiInfo(d[1].host_api).name),
@@ -369,48 +369,48 @@ function require_portaudio_init()
 end
 
 # Low-level wrappers for Portaudio calls
-Pa_GetDeviceInfo(i) = unsafe_load(ccall((:Pa_GetDeviceInfo, libportaudio),
+Pa_GetDeviceInfo(i) = unsafe_load(ccall((:Pa_GetDeviceInfo, :libportaudio),
                                  Ptr{PaDeviceInfo}, (PaDeviceIndex,), i))
-Pa_GetHostApiInfo(i) = unsafe_load(ccall((:Pa_GetHostApiInfo, libportaudio),
+Pa_GetHostApiInfo(i) = unsafe_load(ccall((:Pa_GetHostApiInfo, :libportaudio),
                                    Ptr{PaHostApiInfo}, (PaHostApiIndex,), i))
 
 function Pa_Initialize()
-    err = ccall((:Pa_Initialize, libportaudio), PaError, ())
+    err = ccall((:Pa_Initialize, :libportaudio), PaError, ())
     handle_status(err)
 end
 
 function Pa_Terminate()
-    err = ccall((:Pa_Terminate, libportaudio), PaError, ())
+    err = ccall((:Pa_Terminate, :libportaudio), PaError, ())
     handle_status(err)
 end
 
 function Pa_StartStream(stream::PaStream)
-    err = ccall((:Pa_StartStream, libportaudio), PaError,
+    err = ccall((:Pa_StartStream, :libportaudio), PaError,
                 (PaStream,), stream)
     handle_status(err)
 end
 
 function Pa_StopStream(stream::PaStream)
-    err = ccall((:Pa_StopStream, libportaudio), PaError,
+    err = ccall((:Pa_StopStream, :libportaudio), PaError,
                 (PaStream,), stream)
     handle_status(err)
 end
 
 function Pa_CloseStream(stream::PaStream)
-    err = ccall((:Pa_CloseStream, libportaudio), PaError,
+    err = ccall((:Pa_CloseStream, :libportaudio), PaError,
                 (PaStream,), stream)
     handle_status(err)
 end
 
 function Pa_GetStreamReadAvailable(stream::PaStream)
-    avail = ccall((:Pa_GetStreamReadAvailable, libportaudio), Clong,
+    avail = ccall((:Pa_GetStreamReadAvailable, :libportaudio), Clong,
                 (PaStream,), stream)
     avail >= 0 || handle_status(avail)
     avail
 end
 
 function Pa_GetStreamWriteAvailable(stream::PaStream)
-    avail = ccall((:Pa_GetStreamWriteAvailable, libportaudio), Clong,
+    avail = ccall((:Pa_GetStreamWriteAvailable, :libportaudio), Clong,
                 (PaStream,), stream)
     avail >= 0 || handle_status(avail)
     avail
@@ -419,7 +419,7 @@ end
 function Pa_ReadStream(stream::PaStream, buf::Array, frames::Integer=length(buf),
                        show_warnings::Bool=true)
     frames <= length(buf) || error("Need a buffer at least $frames long")
-    err = ccall((:Pa_ReadStream, libportaudio), PaError,
+    err = ccall((:Pa_ReadStream, :libportaudio), PaError,
                 (PaStream, Ptr{Void}, Culong),
                 stream, buf, frames)
     handle_status(err, show_warnings)
@@ -429,17 +429,17 @@ end
 function Pa_WriteStream(stream::PaStream, buf::Array, frames::Integer=length(buf),
                         show_warnings::Bool=true)
     frames <= length(buf) || error("Need a buffer at least $frames long")
-    err = ccall((:Pa_WriteStream, libportaudio), PaError,
+    err = ccall((:Pa_WriteStream, :libportaudio), PaError,
                 (PaStream, Ptr{Void}, Culong),
                 stream, buf, frames)
     handle_status(err, show_warnings)
     nothing
 end
 
-Pa_GetVersion() = ccall((:Pa_GetVersion, libportaudio), Cint, ())
+Pa_GetVersion() = ccall((:Pa_GetVersion, :libportaudio), Cint, ())
 
 function Pa_GetVersionText()
-    versionPtr = ccall((:Pa_GetVersionText, libportaudio), Ptr{Cchar}, ())
+    versionPtr = ccall((:Pa_GetVersionText, :libportaudio), Ptr{Cchar}, ())
     bytestring(versionPtr)
 end
 
@@ -447,7 +447,7 @@ function Pa_OpenDefaultStream(inChannels::Integer, outChannels::Integer,
                               sampleFormat::PaSampleFormat,
                               sampleRate::Real, framesPerBuffer::Integer)
     streamPtr::Array{PaStream} = PaStream[0]
-    err = ccall((:Pa_OpenDefaultStream, libportaudio),
+    err = ccall((:Pa_OpenDefaultStream, :libportaudio),
                 PaError, (Ptr{PaStream}, Cint, Cint,
                           PaSampleFormat, Cdouble, Culong,
                           Ptr{PaStreamCallback}, Ptr{Void}),
@@ -461,12 +461,12 @@ end
 function handle_status(err::PaError, show_warnings::Bool=true)
     if err == PA_OUTPUT_UNDERFLOWED || err == PA_INPUT_OVERFLOWED
         if show_warnings
-            msg = ccall((:Pa_GetErrorText, libportaudio),
+            msg = ccall((:Pa_GetErrorText, :libportaudio),
                         Ptr{Cchar}, (PaError,), err)
             warn("libportaudio: " * bytestring(msg))
         end
     elseif err != PA_NO_ERROR
-        msg = ccall((:Pa_GetErrorText, libportaudio),
+        msg = ccall((:Pa_GetErrorText, :libportaudio),
                     Ptr{Cchar}, (PaError,), err)
         error("libportaudio: " * bytestring(msg))
     end
