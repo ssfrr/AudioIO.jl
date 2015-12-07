@@ -7,10 +7,10 @@ using DSP, AudioIO
 
 type EnvelopeFollower <: AudioIO.AudioRenderer
     in1::AudioIO.AudioNode
-    a::Array
-    b::Array
-    x_last::Array
-    y_last::Array
+    a::Array{Float32, 1}
+    b::Array{Float32, 1}
+    x_last::Array{Float32, 1}
+    y_last::Array{Float32, 1}
 
     function EnvelopeFollower(cutOff, fs, in1=AudioInput())
 
@@ -22,6 +22,7 @@ type EnvelopeFollower <: AudioIO.AudioRenderer
         b = coefb(f)
         new(in1, a, b, zeros(a), zeros(b))
     end
+    EnvelopeFollower(a::AudioIO.AudioNode) = EnvelopeFollower(4, 44100, a)
 end
 
 typealias Envelope AudioIO.AudioNode{EnvelopeFollower}
@@ -84,29 +85,34 @@ function render(node::EnvelopePlotter, device_input::AudioIO.AudioBuf, info::Aud
 end
 
 
+
+#
+# Single channel vocoder
+#
+
+type EnvelopeVocoder <: AudioIO.AudioRenderer
+    in1::AudioIO.AudioNode
+
+    EnvelopeVocoder(a::AudioIO.AudioNode) = new(a)
+    EnvelopeVocoder() = new(AudioInput())
+end
+
+typealias Vocode AudioIO.AudioNode{EnvelopeVocoder}
+
+function render(node::EnvelopeVocoder, device_input::AudioIO.AudioBuf, info::AudioIO.DeviceInfo)
+
+    input = render(node.in1, device_input, info)
+    output = input .* (rand(Float32, size(input)) * 2 -1)
+end
+
+
 #
 # Run
 #
 
-
-p = Plot(Envelope(5, 44100, AudioInput()))
+p = play(Vocode(Plot(Envelope(AudioInput()))))
 play(p)
 sleep(0.00001)
 @printf("\n\nFollow Envelope\n")
-sleep(10)
+sleep(100)
 stop(p)
-
-p = Plot(Envelope(5, 44100))
-play(p)
-sleep(0.00001)
-@printf("\n\nFollow Envelope\n")
-sleep(10)
-stop(p)
-
-@printf("\n\nFollow Absolute Signal\n")
-p = Plot()
-play(p)
-sleep(10)
-stop(p)
-
-
