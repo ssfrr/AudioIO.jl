@@ -13,18 +13,26 @@ provides(AptGet, "libsndfile1-dev", libsndfile)
 provides(Pacman, "portaudio", libportaudio)
 provides(Pacman, "libsndfile", libsndfile)
 
+@static if is_apple()
+  if Pkg.installed("Homebrew") === nothing
+    error("Homebrew package not installed, please run Pkg.add(\"Homebrew\")")
+  end
 
-@osx_only begin
-    using Homebrew
-    provides(Homebrew.HB, "portaudio", libportaudio)
-    provides(Homebrew.HB, "libsndfile", libsndfile)
+  using Homebrew
+  provides(Homebrew.HB, "portaudio", libportaudio)
+  provides(Homebrew.HB, "libsndfile", libsndfile)
 end
 
-@windows_only begin
-    using WinRPM
-    provides(WinRPM.RPM, "libportaudio2", libportaudio, os = :Windows)
-    provides(WinRPM.RPM, "libsndfile1", libsndfile, os = :Windows)
+@static if is_windows()
+  if Pkg.installed("WinRPM") === nothing
+    error("WinRPM package not installed, please run Pkg.add(\"WinRPM\")")
+  end
+  using WinRPM
+  provides(WinRPM.RPM, "libportaudio2", libportaudio, os = :Windows)
+  provides(WinRPM.RPM, "libsndfile1", libsndfile, os = :Windows)
 end
 
-@BinDeps.install [:libportaudio => :libportaudio,
-                  :libsndfile => :libsndfile]
+@BinDeps.install Dict(
+  :libportaudio => :libportaudio,
+  :libsndfile => :libsndfile
+)
