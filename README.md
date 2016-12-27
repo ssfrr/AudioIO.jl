@@ -5,6 +5,8 @@ AudioIO.jl
 [![Pkgs Status](http://pkg.julialang.org/badges/AudioIO_release.svg)](http://pkg.julialang.org/?pkg=AudioIO&ver=release)
 [![Coverage Status](https://img.shields.io/coveralls/ssfrr/AudioIO.jl.svg)](https://coveralls.io/r/ssfrr/AudioIO.jl?branch=master)
 
+## This package is no longer being maintained. I suggest you check out the [JuliaAudio](https://github.com/JuliaAudio) family of packages for audio-related work in Julia
+
 AudioIO interfaces to audio streams, including real-time recording, audio
 processing, and playback through your sound card using PortAudio. It also
 supports reading and writing audio files in a variety of formats. It is under
