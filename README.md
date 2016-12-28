@@ -108,13 +108,30 @@ AudioStream is an abstract type, which currently has a PortAudioStream subtype
 that writes to the sound card, and a TestAudioStream that is used in the unit
 tests.
 
-Currently only 1 stream at a time is supported so there's no reason to provide
+With the method PortAudioStream, which uses the default input and output device(s), 
+only 1 stream at a time is supported, so there's no reason to provide
 an explicit stream to the `play` function. The stream has a root mixer field
 which is an instance of the AudioMixer type, so that multiple AudioNodes
 can be heard at the same time. Whenever a new frame of audio is needed by the
 sound card, the stream calls the `render` method on the root audio mixer, which
 will in turn call the `render` methods on any input AudioNodes that are set
 up as inputs.
+
+When a Pa_AudioStream is created via a call to 
+Pa_AudioStream(device_index, channels=2, input=false,
+                              sample_rate::Integer=44100,
+                              framesPerBuffer::Integer=2048,
+                              show_warnings::Bool=false,
+                              sample_format::PaSampleFormat=paInt16,
+                              callback=0)
+a single stream is opened for reading or writing. This returns a Pa_AudioStream on success, 
+which is used either via the functions AudioIO.read(::Pa_AudioStream) or 
+AudioIO.write(::Pa_AudioStream, buffer) for read and write respectively.
+
+If nonblocking I/O is needed, a callback may be passed to the Pa_AudioStream constructor, 
+which is provided by the user and should return a buffer of frames if used for output and should
+handle a buffer of frames as an argument if used as input. This is similar
+to the methods used by PyAudio's python interface to PortAudio. See the examples also.
 
 Installation
 ------------

@@ -1,14 +1,15 @@
 typealias PaTime Cdouble
 typealias PaError Cint
 typealias PaSampleFormat Culong
-# PaStream is always used as an opaque type, so we're always dealing with the
-# pointer
+# PaStream is always used as an opaque type, so we're always dealing 
+# with the pointer
 typealias PaStream Ptr{Void}
 typealias PaDeviceIndex Cint
 typealias PaHostApiIndex Cint
 typealias PaTime Cdouble
 typealias PaHostApiTypeId Cint
 typealias PaStreamCallback Void
+typealias PaStreamFlags Culong
 
 const PA_NO_ERROR = 0
 const PA_INPUT_OVERFLOWED = -10000 + 19
@@ -22,7 +23,7 @@ const paInt8    = convert(PaSampleFormat, 0x10)
 const paUInt8   = convert(PaSampleFormat, 0x20)
 
 # PaHostApiTypeId values
-const pa_host_api_names = {
+@compat const pa_host_api_names = (
     0 => "In Development", # use while developing support for a new host API
     1 => "Direct Sound",
     2 => "MME",
@@ -37,7 +38,7 @@ const pa_host_api_names = {
     12 => "Jack",
     13 => "WASAPI",
     14 => "AudioScience HPI"
-}
+)
 
 # track whether we've already inited PortAudio
 portaudio_inited = false
@@ -81,6 +82,203 @@ function destroy(stream::PortAudioStream)
     portaudio_inited = false
 end
 
+type CCallbackTimeInfo
+   inAdc::Cdouble
+   current::Cdouble
+   outAdc::Cdouble
+end
+
+typealias PaStreamCallbackFlags Culong
+
+type CCallbackUdata
+    func::Function
+    sample_format::PaSampleFormat
+    channels::Cint
+    is_read::Bool
+end
+
+type Pa_StreamParameters
+    device::PaDeviceIndex
+    channelCount::Cint
+    sampleFormat::PaSampleFormat
+    suggestedLatency::PaTime
+    hostAPISpecificStreamInfo::Ptr{Void}
+end
+
+"""
+    Open a single stream, not necessarily the default one
+    The stream is unidirectional, either input or default output
+    see http://portaudio.com/docs/v19-doxydocs/portaudio_8h.html
+"""
+function Pa_OpenStream(device::PaDeviceIndex, channels::Integer, 
+                       input::Bool, sampleFormat::PaSampleFormat,
+                       sampleRate::Cdouble, framesPerBuffer::Culong,
+                       callback, udata)
+    streamPtr::Array{PaStream} = PaStream[1]
+    ioParameters = Pa_StreamParameters(device, Cint(channels), 
+                                       sampleFormat, PaTime(0.001), 
+                                       Ptr{Void}(0))
+    streamcallback = Ptr{PaStreamCallback}(callback) 
+    if input
+        err = ccall((:Pa_OpenStream, libportaudio), PaError, 
+                    (PaStream, Ref{Pa_StreamParameters}, Ptr{Void},
+                    Cdouble, Culong, Culong, 
+                    Ptr{PaStreamCallback}, Ptr{Void}),
+                    streamPtr, ioParameters, Ptr{Void}(0),
+                    sampleRate, framesPerBuffer, 0, 
+                    streamcallback, Ptr{Void}(udata))
+    else
+        err = ccall((:Pa_OpenStream, libportaudio), PaError, 
+                    (PaStream, Ptr{Void}, Ref{Pa_StreamParameters},
+                    Cdouble, Culong, Culong,
+                    Ptr{PaStreamCallback}, Ptr{Void}),
+                    streamPtr, Ptr{Void}(0), ioParameters,
+                    sampleRate, framesPerBuffer, 0, 
+                    streamcallback, Ptr{Void}(udata))
+    end             
+    handle_status(err)
+    streamPtr[1]
+end
+
+type Pa_AudioStream <: AudioStream
+    root::AudioMixer
+    info::DeviceInfo
+    show_warnings::Bool
+    stream::PaStream
+    sformat::PaSampleFormat
+    channels::Integer
+    framesPerBuffer::Integer
+
+    """ 
+        Get device parameters needed for opening with portaudio
+        default is output as 44100/16bit int, same as CD audio type input
+        callback is optional, otherwise use blocing read and write functions
+        the callback must be a function that, if for writing, can return as an argument
+        a buffer the size and type same as stream.sbuffer, or if for output should 
+    """
+    function Pa_AudioStream(device_index, channels=2, input=false,
+                              sample_rate::Integer=44100,
+                              framesPerBuffer::Integer=2048,
+                              show_warnings::Bool=false,
+                              sample_format::PaSampleFormat=paInt16,
+                              callback=0, udata=0)
+        require_portaudio_init()
+        if (callback != 0) & (udata == 0)
+            # need to make a callback udata package
+            udata = CCallbackUdata(callback, sample_format, channels, input)
+            callback = pa_callback
+        end
+        stream = Pa_OpenStream(device_index, channels, input, sample_format,
+                               Cdouble(sample_rate), Culong(framesPerBuffer),
+                               callback, pointer_from_objref(udata))
+        Pa_StartStream(stream)
+        root = AudioMixer()
+        this = new(root, DeviceInfo(sample_rate, framesPerBuffer), 
+                   show_warnings, stream, sample_format, 
+                   channels, framesPerBuffer)
+    end
+end
+
+function open_read(device_index, channels=2,
+                   sample_rate::Integer=44100, 
+                   framesPerBuffer::Integer=2048,
+                   show_warnings::Bool=false,
+                   sample_format::PaSampleFormat=paInt16,
+                   callback=0)
+    Pa_AudioStream(device_index, channels, true, sample_rate,
+                   framesPerBuffer, show_warnings,
+                   sample_format, callback)
+end
+
+function open_write(device_index, channels=2,
+                   sample_rate::Integer=44100, 
+                   framesPerBuffer::Integer=2048,
+                   show_warnings::Bool=false,
+                   sample_format::PaSampleFormat=paInt16,
+                   callback=0)
+    Pa_AudioStream(device_index, channels, false, sample_rate,
+                   framesPerBuffer, show_warnings,
+                   sample_format, callback)
+end
+
+"""
+Blocking read from a Pa_AudioStream that is open as input
+"""
+function read(stream::Pa_AudioStream, nframes::Int)
+    datatype = PaSampleFormat_to_T(stream.sformat)
+    buf = zeros(datatype, stream.framesPerBuffer * stream.channels)
+    return_buffer = zeros(datatype, nframes * stream.channels)
+    cur = 0
+    read_needed = nframes
+    while read_needed > 0
+        read_size = min(read_needed, stream.framesPerBuffer)
+        used = read_size * stream.channels
+        while Pa_GetStreamReadAvailable(stream.stream) < read_size
+            sleep(0.001)
+            yield()
+        end
+        err = ccall((:Pa_ReadStream, libportaudio), PaError,
+                    (PaStream, Ptr{Void}, Culong),
+                    stream.stream, buf, read_size)
+        handle_status(err, stream.show_warnings)
+        return_buffer[cur + 1: cur + used] = buf[1:used]
+        cur = cur + used
+        read_needed -= read_size
+    end
+    return_buffer
+end
+
+"""
+Blocking write to a Pa_AudioStream that is open for output
+"""
+function write(ostream::Pa_AudioStream, buffer)
+    cur = 0
+    write_needed = length(buffer)
+    while write_needed > 0
+        write_size = min(write_needed, ostream.framesPerBuffer)
+        while Pa_GetStreamWriteAvailable(ostream.stream) < write_size
+            sleep(0.001)
+            yield()
+        end
+        end_cur = cur + write_size
+        err = ccall((:Pa_WriteStream, libportaudio), PaError,
+                    (PaStream, Ptr{Void}, Culong), ostream.stream, 
+                    buffer[cur + 1: end_cur], 
+                    Culong(write_size/ostream.channels))
+        handle_status(err, ostream.show_warnings)
+        write_needed -= write_size
+        cur = end_cur
+    end
+    0
+end
+
+"""
+Take the c callback, restore types, pass to the callback functions
+"""
+function callback_wrapper(input::Ptr{Void}, output::Ptr{Void}, 
+                               frameCount::Culong, 
+                               timeInfo::Ptr{AudioIO.CCallbackTimeInfo}, 
+                               sflags::Culong, udata::Ptr{Void})
+    ("$udata")  # workaround, get julia to prep for the dereference 
+    cudata = unsafe_pointer_to_objref(Ptr{CCallbackUdata}(udata))
+    datatype = PaSampleFormat_to_T(cudata.sample_format)
+    if cudata.is_read
+        indata = pointer_to_array(Ptr{datatype}(input), 
+                            (frameCount * cudata.channels, ))
+        cudata.func(indata)
+    else
+        outdata = (cudata.func)()
+        ccall(:memcpy, Ptr{Void}, (Ptr{Void}, Ptr{Void}, Cint), 
+              output, outdata, length(outdata) * sizeof(outdata[1]))    
+    end
+    Cint(0)
+end
+
+const pa_callback = cfunction(callback_wrapper, Cint, (Ptr{Void}, 
+                              Ptr{Void}, 
+                              Culong, Ptr{AudioIO.CCallbackTimeInfo}, 
+                              Culong, Ptr{Void}))
+
 ############ Internal Functions ############
 
 function portaudio_task(stream::PortAudioStream)
@@ -112,6 +310,30 @@ function portaudio_task(stream::PortAudioStream)
     end
 end
 
+"""
+Helper function to make the right type of buffer for various 
+sample formats. Converts PaSampleFormat to a typeof
+"""
+function PaSampleFormat_to_T(fmt::PaSampleFormat)
+    retval = UInt8(0x0)
+    if fmt == 1
+        retval = Float32(1.0)
+    elseif fmt == 2
+        retval = Int32(0x02)
+    elseif fmt == 4
+        retval = Int24(0x04)
+    elseif fmt == 8
+        retval = Int16(0x08)
+    elseif fmt == 16
+        retval = Int8(0x10)
+    elseif fmt == 32
+        retval = UInt8(0x20)
+    else
+        info("Flawed input to PaSampleFormat_to_T, primitive unknown")
+    end
+    typeof(retval)
+end
+
 type PaDeviceInfo
     struct_version::Cint
     name::Ptr{Cchar}
@@ -134,21 +356,23 @@ type PaHostApiInfo
     defaultOutputDevice::PaDeviceIndex
 end
 
-type PortAudioInterface <: AudioInterface
-    name::String
-    host_api::String
+@compat type PortAudioInterface <: AudioInterface
+    name::AbstractString
+    host_api::AbstractString
     max_input_channels::Int
     max_output_channels::Int
+    device_index::PaDeviceIndex
 end
 
 function get_portaudio_devices()
     require_portaudio_init()
     device_count = ccall((:Pa_GetDeviceCount, libportaudio), PaDeviceIndex, ())
-    pa_devices = [Pa_GetDeviceInfo(i) for i in 0:(device_count - 1)]
-    [PortAudioInterface(bytestring(d.name),
-                        bytestring(Pa_GetHostApiInfo(d.host_api).name),
-                        d.max_input_channels,
-                        d.max_output_channels)
+    pa_devices = [ [Pa_GetDeviceInfo(i), i] for i in 0:(device_count - 1)]
+    [PortAudioInterface(bytestring(d[1].name),
+                        bytestring(Pa_GetHostApiInfo(d[1].host_api).name),
+                        d[1].max_input_channels,
+                        d[1].max_output_channels,
+                        d[2])
      for d in pa_devices]
 end
 
