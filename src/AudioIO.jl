@@ -80,6 +80,12 @@ function play(node::AudioNode)
     play(node, _stream)
 end
 
+# Stream not given, but sampling rate of the array is specified.
+function play(node::AudioNode, sample_rate::Integer)
+    stream = PortAudioStream(sample_rate)
+    play(node, stream)
+end
+
 function stop(node::AudioNode)
     node.active = false
     notify(node.end_cond)
