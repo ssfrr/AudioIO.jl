@@ -13,7 +13,7 @@ end
 
 # Generates a sin tone at the given frequency
 
-type SinOscRenderer{T<:Union(Float32, AudioNode)} <: AudioRenderer
+@compat type SinOscRenderer{T<:Union{Float32, AudioNode}} <: AudioRenderer
     freq::T
     phase::Float32
     buf::AudioBuf
@@ -124,7 +124,7 @@ end
 Base.push!(mixer::AudioMixer, node::AudioNode) = push!(mixer.renderer.inputs, node)
 
 #### Gain ####
-type GainRenderer{T<:Union(Float32, AudioNode)} <: AudioRenderer
+@compat type GainRenderer{T<:Union{Float32, AudioNode}} <: AudioRenderer
     in1::AudioNode
     in2::T
     buf::AudioBuf
@@ -228,7 +228,7 @@ function play(arr::AudioBuf, args...)
 end
 
 # If the array is the wrong floating type, convert it
-function play{T <: FloatingPoint}(arr::Array{T}, args...)
+@compat function play{T <: AbstractFloat}(arr::Array{T}, args...)
     arr = convert(AudioBuf, arr)
     play(arr, args...)
 end

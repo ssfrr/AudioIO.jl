@@ -108,13 +108,35 @@ AudioStream is an abstract type, which currently has a PortAudioStream subtype
 that writes to the sound card, and a TestAudioStream that is used in the unit
 tests.
 
-Currently only 1 stream at a time is supported so there's no reason to provide
+With the method PortAudioStream, which uses the default input and output device(s), 
+only 1 stream at a time is supported, so there's no reason to provide
 an explicit stream to the `play` function. The stream has a root mixer field
 which is an instance of the AudioMixer type, so that multiple AudioNodes
 can be heard at the same time. Whenever a new frame of audio is needed by the
 sound card, the stream calls the `render` method on the root audio mixer, which
 will in turn call the `render` methods on any input AudioNodes that are set
 up as inputs.
+
+For opening an audio device for either reading or writing but not both, the functions 
+open_read(device_index, channels=2, sample_rate::Integer=44100, 
+          framesPerBuffer::Integer=2048, show_warnings::Bool=false,
+          sample_format::PaSampleFormat=paInt16, callback=0)
+
+and
+open_write(device_index, channels=2, sample_rate::Integer=44100, 
+          framesPerBuffer::Integer=2048, show_warnings::Bool=false,
+          sample_format::PaSampleFormat=paInt16, callback=0)
+
+are provided. These return a Pa_Audiostream which can be used with the blocking I/O functions 
+read(stream::Pa_AudioStream, nframes::Int) (returns an array of frames)
+and 
+write(stream::Pa_AudioStream, buffer) 
+for streams opened for reading and writing, respectively.
+
+If nonblocking I/O is needed, a callback may be passed to the open_read or open_write methods,
+which is provided by the user and should return a buffer of frames if used for output and should
+handle a buffer of frames as an argument if used as input, as shown in the examples folder in 
+this package.
 
 Installation
 ------------
