@@ -22,7 +22,7 @@ const paInt8    = convert(PaSampleFormat, 0x10)
 const paUInt8   = convert(PaSampleFormat, 0x20)
 
 # PaHostApiTypeId values
-const pa_host_api_names = {
+const pa_host_api_names = Dict{Any,Any}(
     0 => "In Development", # use while developing support for a new host API
     1 => "Direct Sound",
     2 => "MME",
@@ -37,7 +37,7 @@ const pa_host_api_names = {
     12 => "Jack",
     13 => "WASAPI",
     14 => "AudioScience HPI"
-}
+)
 
 # track whether we've already inited PortAudio
 portaudio_inited = false
@@ -135,8 +135,8 @@ type PaHostApiInfo
 end
 
 type PortAudioInterface <: AudioInterface
-    name::String
-    host_api::String
+    name::AbstractString
+    host_api::AbstractString
     max_input_channels::Int
     max_output_channels::Int
 end

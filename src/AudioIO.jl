@@ -1,5 +1,7 @@
 module AudioIO
 
+#explicitly import + and * operators
+import Base.+, Base.*
 # export the basic API
 export play, stop, get_audio_devices
 

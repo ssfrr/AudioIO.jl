@@ -26,5 +26,5 @@ end
     provides(WinRPM.RPM, "libsndfile1", libsndfile, os = :Windows)
 end
 
-@BinDeps.install [:libportaudio => :libportaudio,
-                  :libsndfile => :libsndfile]
+@BinDeps.install Dict(:libportaudio => :libportaudio,
+                  :libsndfile => :libsndfile)
